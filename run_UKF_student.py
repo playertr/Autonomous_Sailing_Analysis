@@ -25,6 +25,11 @@ DT = 0.1
 X_LANDMARK = 5.  # meters
 Y_LANDMARK = -5.  # meters
 EARTH_RADIUS = 6.3781E6  # meters
+MAST_HEIGHT = 10
+MS_TO_KNOTS = 1 #get correct value for this
+lmda = 1
+alpha = 1
+beta = 1
 
 
 def load_data(filename):
@@ -37,24 +42,20 @@ def load_data(filename):
     data (dict)     -- the logged data with data categories as keys
                        and values list of floats
     """
-    is_filtered = False
-    if os.path.isfile(filename + "_filtered.csv"):
-        f = open(filename + "_filtered.csv")
-        is_filtered = True
-    else:
-        f = open(filename + ".csv")
+    f = open(filename + ".csv")
 
     file_reader = csv.reader(f, delimiter=',')
 
     # Load data into dictionary with headers as keys
     data = {}
-    header = ["X", "Y", "Z", "Time Stamp", "Latitude", "Longitude",
-              "Yaw", "Pitch", "Roll", "AccelX", "AccelY", "AccelZ"]
+
+    # Note: we chose the set of data from t = 7000 to 8000 seconds, based on the .mat file.
+    header = ["Timestamp","BSP","AWA","AWS","TWA","TWS","TWD","HDG","Heel","Rake","Lat","Lon","COG","SOG"]
     for h in header:
         data[h] = []
 
     row_num = 0
-    f_log = open("bad_data_log.txt", "w")
+    f_log = open("data_log.txt", "w")
     for row in file_reader:
         for h, element in zip(header, row):
             # If got a bad value just use the previous value
@@ -68,7 +69,7 @@ def load_data(filename):
     f.close()
     f_log.close()
 
-    return data, is_filtered
+    return data
 
 
 def save_data(data, filename):
@@ -203,8 +204,8 @@ def motion_uncertainty(sigma_points_pred,mean_bar_t,lmda,alpha,beta):
     weights[0] = lmda/(n+lmda) + (1-alpha**2+beta)
     weights[1:] = 1/(2*(n+lmda))
     for i in range(m):
-        squared_error = (sigma_points_pred[:,i]-mean_bar_t)*(sigma_points_pred[:,i]-mean_bar_t).T #slightly confused why this is a scalar and not a matrix
-        mean_bar_t = mean_bar_t + weights[i]*squared_error+Rt
+        squared_error = np.matmul((sigma_points_pred[:,i]-mean_bar_t),(sigma_points_pred[:,i]-mean_bar_t).T) #slightly confused why this is a scalar and not a matrix
+        mean_bar_t = mean_bar_t + weights[i]*squared_error+R_t
         mean_bar_t[0] = wrap_to_pi(mean_bar_t[0])
         mean_bar_t[1] = wrap_to_pi(mean_bar_t[1])
         mean_bar_t[4] = wrap_to_pi(mean_bar_t[4])
@@ -276,9 +277,6 @@ def prediction_step(mean_t_prev, u_t, sigma_t_prev):
     """
 
     """STUDENT CODE START"""
-    lmda = 1
-    alpha = 1
-    beta = 1
     sigma_points = calc_sigma_points(mean_t_prev, sigma_t_prev, lmda)
     sigma_points_pred = propogate_state(sigma_points,u_t)
     mean_bar_t = motion_regroup(sigma_points_pred,lmda)
@@ -290,7 +288,7 @@ def prediction_step(mean_t_prev, u_t, sigma_t_prev):
     return [mean_bar_t, sigma_x_bar_t, sigma_points_pred_final]
 
 
-def calc_meas_jacobian(x_bar_t):
+def calc_meas_sigma_points(sigma_points_pred_final):
     """Calculate the Jacobian of your measurment model with respect to state
 
     Parameters:
@@ -300,25 +298,17 @@ def calc_meas_jacobian(x_bar_t):
     H_t (np.array)      -- Jacobian of measurment model
     """
     """STUDENT CODE START"""
-    L1 = [5.0,-5.0]
-    (n_x,)= x_bar_t.shape
-    H_t = np.zeros((3,n_x))
-    
-    # H_t[0] = [-1,0,0,0,0,0,0]
-    # H_t[1] = [0,-1,0,0,0,0,0]
-    # H_t[2] = [0,0,1,0,0,0,0]
-    
-    
-    H_t[0] = [-np.sin(x_bar_t[2]), np.cos(x_bar_t[2]), ((L1[0]-x_bar_t[0])*np.cos(x_bar_t[2])+(L1[1]-x_bar_t[1])*np.sin(x_bar_t[2])),0,0,0,0]
-    H_t[1] =[-np.cos(x_bar_t[2]), -np.sin(x_bar_t[2]), (-(L1[0]-x_bar_t[0])*np.sin(x_bar_t[2])+(L1[1]-x_bar_t[1])*np.cos(x_bar_t[2])),0,0,0,0]
-    H_t[2] = [0,0,1,0,0,0,0]
+    (n,m)= sigma_points_pred_final.shape
+    Z_bar_t = np.zeros((2,m))
+    for i in range(m): 
+        Z_bar_t[:,i] = calc_meas_prediction(sigma_points_pred_final[:,i])
     
     """STUDENT CODE END"""
 
-    return H_t
+    return Z_bar_t
 
 
-def calc_kalman_gain(sigma_x_bar_t, H_t):
+def calc_kalman_gain(sigma_bar_xzt,S_t):
     """Calculate the Kalman Gain
 
     Parameters:
@@ -329,20 +319,12 @@ def calc_kalman_gain(sigma_x_bar_t, H_t):
     K_t (np.array)            -- Kalman Gain
     """
     """STUDENT CODE START"""
-    # Covariance matrix of measurments
-    sigma_z_x= np.array([.268,0,0]) #CALC SIGMA ZZZ
-    sigma_z_y= np.array([0,.26800,0])
-    sigma_z_theta = np.array([0,0,.002])
-    sigma_z_t = np.array([sigma_z_x,sigma_z_y,sigma_z_theta])
-    sigmax_dot_h = np.matmul(sigma_x_bar_t,H_t.T)
-    inverse = np.linalg.inv(np.add(np.matmul(np.matmul(H_t,sigma_x_bar_t),H_t.T),sigma_z_t))
-    K_t = np.matmul(sigmax_dot_h,inverse)
+    K_t = np.matmul(sigma_bar_xzt, np.linalg.inv(S_t))
     """STUDENT CODE END"""
 
     return K_t
 
-
-def calc_meas_prediction(sigma_points_bar_t):
+def calc_meas_prediction(x_bar_t):
     """Calculate predicted measurement based on the predicted state
 
     Parameters:
@@ -350,25 +332,76 @@ def calc_meas_prediction(sigma_points_bar_t):
 
     Returns:
     z_bar_t (np.array)  -- the predicted measurement
+    z_bar_t defined as [z_xLL, z_yLL]
+    """
+
+    roll      = x_bar_t[0]
+    yaw       = x_bar_t[1]
+    roll_dot  = x_bar_t[2]
+    yaw_dot   = x_bar_t[3]
+    v_ang     = x_bar_t[4]
+    v_mag     = x_bar_t[5]
+    TWA       = x_bar_t[6]
+    TWS       = x_bar_t[7]
+
+    # convert true wind from polar coordinates to cartesian
+    TWS_x_comp = TWS * np.cos(TWA) # TW East
+    TWS_y_comp = TWS * np.sin(TWA) # TW North
+
+    # convert v_boat into cartesian coordinates 
+    # note: this is where the wind is coming from
+    v_G_x = v_mag * np.cos(v_ang)
+    v_G_y = v_mag * np.sin(v_ang)
+
+    # add components to get wind vector relative to boat in global frame
+    app_wind_east   = TWS_x_comp + v_G_x
+    app_wind_north  = TWS_y_comp + v_G_y
+    
+    # rotate into boat frame to get wind vector relative to boat in (starboard, forward) frame
+    app_wind_stb    = app_wind_east * np.sin(yaw) - app_wind_north * np.cos(yaw)
+    app_wind_fwd    = app_wind_east * np.cos(yaw) + app_wind_north * np.sin(yaw)
+
+    # reduce the starboard component by the cosine of the heel (roll) angle
+    # to account for out-of-plane measurement of the wind vector
+    # note: if we want to account for mast twist later, this is where we do it.
+    app_wind_right_of_vane  = app_wind_stb * np.cos(roll) + MAST_HEIGHT * roll_dot * MS_TO_KNOTS
+    app_wind_fwd_of_vane    = app_wind_fwd
+
+    # take the angle and magnitude of the relative wind vector in the vane frame
+    z_AWA = np.arctan2(app_wind_fwd_of_vane, app_wind_right_of_vane)
+    z_AWS = np.linalg.norm([app_wind_right_of_vane, app_wind_fwd_of_vane])
+
+    z_bar_t = np.array([z_AWA, z_AWS])
+
+    return z_bar_t
+
+def meas_regroup(Z_bar_t,lmda):
+    """Calculate the Jacobian of motion model with respect to control input
+
+    Parameters:
+    x_t_prev (np.array)     -- the previous state estimate
+    u_t (np.array)          -- the current control input
+
+    Returns:
+    G_u_t (np.array)        -- Jacobian of motion model wrt to u
     """
 
     """STUDENT CODE START"""
-    (n,m) = sigma_points_bar_t.shape
-    Z_bar_t = np.zeros((n,m))
-    for i in range(m): 
-        sigma_points_pred[0,i] = u_t[0]
-        sigma_points_pred[1,i] = u_t[1]
-        sigma_points_pred[2,i] = wrap_to_pi(u_t[0]-sigma_points[0,i])/DT
-        sigma_points_pred[3,i] = wrap_to_pi(u_t[1]-sigma_points[1,i])/DT
-        sigma_points_pred[4,i] = u_t[2]
-        sigma_points_pred[5,i] = u_t[3]
-        sigma_points_pred[6,i] = sigma_points[6,i]
-        sigma_points_pred[7,i] = sigma_points[7,i]
-    sigma_points_pred = sigma_points
+    (n,m)= Z_bar_t.shape
+    z_bar_t = np.zeros((n,1))
+    weights = np.zeros(m)
+    weights[0] = lmda/(n+lmda)
+    weights[1:] = 1/(2*(n+lmda))
+    for i in range(m):
+        z_bar_t = z_bar_t + weights[i]*Z_bar_t[:,i]
+        mean_bar_t[0] = wrap_to_pi(mean_bar_t[0])
+        mean_bar_t[1] = wrap_to_pi(mean_bar_t[1])
+        mean_bar_t[4] = wrap_to_pi(mean_bar_t[4])
+        mean_bar_t[6] = wrap_to_pi(mean_bar_t[6])
+
     """STUDENT CODE END"""
 
-    return Z_bar_t
-
+    return z_bar_t
 
 def correction_step(mean_bar_t, z_t, sigma_x_bar_t, sigma_points_pred_final):
     """Compute the correction of EKF
@@ -384,8 +417,12 @@ def correction_step(mean_bar_t, z_t, sigma_x_bar_t, sigma_points_pred_final):
     """
 
     """STUDENT CODE START"""
-    (n_x,) = mean_bar_t.shape
-    Z_bar_t = calc_meas_prediction(sigma_points_pred_final)
+    Z_bar_t = calc_meas_sigma_points(sigma_points_pred_final)
+    z_bar_t = meas_regroup(Z_bar_t,lmda)
+    S_t,sigma_bar_xzt = meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t)
+    K_t = calc_kalman_gain(sigma_bar_xzt,S_t)
+    mean_t = mean_bar_t + np.matmul(K_t,(z_t-z_bar_t))
+    sigma_x_est_t = sigma_x_bar_t - np.mult(K_t,np.matmul(S_t,K_t.T))
 
     """STUDENT CODE END"""
 
