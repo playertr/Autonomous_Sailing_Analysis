@@ -19,23 +19,36 @@ import pdb
 from scipy.stats import norm
 import scipy
 
-NUM_PARTICLES = 1000
+NUM_PARTICLES   = 1000
+MAST_HEIGHT     = 33 # meters
+MS_TO_KNOTS     = 1.944 # knots per m/s
 
-# define the randomness in theta & distance for propagating state
-# STDDEV_THETA =  0.0872665 # radians, 5 degrees
-STDDEV_THETA =  0.261799 # radians, 15 degrees
+
 STDDEV_DISTANCE = 0.1 # meters
-# stddev for defining particle weight in correction step
-STDDEV_MEAS_ERR = 0.5 # meters
+
 STDDEV_INIT = 100 # in any dimension, the initial particle array with be randomized with this.
+
+# Propagation variance  (1-second timestep)
+# 0.0872665 radians = 5 degrees
+# 0.261799 radians  = 15 degrees
+STDDEV_ROLL         = 0.261799
+STDDEV_YAW          = 0.261799
+STDDEV_ROLL_DOT     = 0.01
+STDDEV_YAW_DOT      = 0.01
+STDDEV_V_ANG        = 0.261799
+STDDEV_V_MAG        = 1
+STDDEV_TWA          = 0.261799
+STDDEV_TWS          = 1
+
+# Measurement variance
+STDDEV_MEAS_AWA     = 0.0872665
+STDDEV_MEAS_AWS     = 1
+
+DELTA_T = 1.0275 # seconds
 
 HEIGHT_THRESHOLD = 0.0  # meters
 GROUND_HEIGHT_THRESHOLD = -.4  # meters
-DT = 0.1
-X_LANDMARK = 5.  # meters
-Y_LANDMARK = -5.  # meters
 EARTH_RADIUS = 6.3781E6  # meters
-DELTA_T = 0.1  # assume "10^5" uS = 0.1 s
 
 
 def load_data(filename):
@@ -48,24 +61,20 @@ def load_data(filename):
     data (dict)     -- the logged data with data categories as keys
                        and values list of floats
     """
-    is_filtered = False
-    if os.path.isfile(filename + "_filtered.csv"):
-        f = open(filename + "_filtered.csv")
-        is_filtered = True
-    else:
-        f = open(filename + ".csv")
+    f = open(filename + ".csv")
 
     file_reader = csv.reader(f, delimiter=',')
 
     # Load data into dictionary with headers as keys
     data = {}
-    header = ["X", "Y", "Z", "Time Stamp", "Latitude", "Longitude",
-              "Yaw", "Pitch", "Roll", "AccelX", "AccelY", "AccelZ"]
+
+    # Note: we chose the set of data from t = 7000 to 8000 seconds, based on the .mat file.
+    header = ["Timestamp","BSP","AWA","AWS","TWA","TWS","TWD","HDG","Heel","Rake","Lat","Lon","COG","SOG"]
     for h in header:
         data[h] = []
 
     row_num = 0
-    f_log = open("bad_data_log.txt", "w")
+    f_log = open("data_log.txt", "w")
     for row in file_reader:
         for h, element in zip(header, row):
             # If got a bad value just use the previous value
@@ -79,7 +88,7 @@ def load_data(filename):
     f.close()
     f_log.close()
 
-    return data, is_filtered
+    return data
 
 
 def save_data(data, filename):
@@ -177,28 +186,30 @@ def propagate_state(x_t_prev, u_t):
 
     Returns:
     x_bar_t (np.array)   -- the predicted state
-    state vector is [x_t; y_t; theta_t] all in the global frame
+    state vector is (roll, yaw, rolldot, yawdot, v_ang, v_mag, twa, tws)^T
 
-    u_t  (float)         -- the yaw value, our control input 
-
+    u_t  (float)         -- the control input 
+    control vector is (roll_meas, yaw_meas, v_ang_meas, v_mag_meas)
     """
-    x_prev = x_t_prev[0]
-    y_prev = x_t_prev[1]
-    theta_prev = x_t_prev[2]
+    u_roll      = u[0]
+    u_yaw       = u[1]
+    x_roll      = x_t_prev[0]
+    x_yaw       = x_t_prev[1]
+    u_v_ang     = u[2]
+    u_v_mag     = u[3]
+    x_TWA       = x_t_prev[6]
+    x_TWS       = x_t_prev[7]
 
-    # sample random theta_prev & distance
-    samp_theta = theta_prev + np.random.normal(0, STDDEV_THETA)
-    samp_dist = np.random.normal(0, STDDEV_DISTANCE)
+    roll        = u_roll                                + np.random.normal(0, STDDEV_ROLL)
+    yaw         = u_yaw                                 + np.random.normal(0, STDDEV_YAW)
+    roll_dot    = wrap_to_pi(roll - x_roll) / DELTA_T   + np.random.normal(0, STDDEV_ROLL_DOT)
+    yaw_dot     = wrap_to_pi(yaw - x_yaw) / DELTA_T     + np.random.normal(0, STDDEV_YAW_DOT)
+    v_ang       = u_v_ang                               + np.random.normal(0, STDDEV_V_ANG)
+    v_mag       = u_v_mag                               + np.random.normal(0, STDDEV_V_MAG)
+    TWA         = x_TWA                                 + np.random.normal(0, STDDEV_TWA)
+    TWS         = x_TWS                                 + np.random.normal(0, STDDEV_TWS)
 
-    # sample predicted state x_t_i with probability P(x_t_i | x_t-1_i , u_t)
-    x_t = x_prev + samp_dist * np.cos(samp_theta)
-    y_t = y_prev + samp_dist * np.sin(samp_theta)
-    
-    # reset theta to be the measured yaw value
-    theta_t = u_t 
-    theta_t = wrap_to_pi(theta_t)
-
-    x_bar_t = np.array([x_t, y_t, theta_t])
+    x_bar_t = np.array([roll, yaw, roll_dot, yaw_dot, v_ang, v_mag, TWA, TWS])
 
     return x_bar_t
 
@@ -216,10 +227,20 @@ def prediction_step(P_t_prev, u_t):
     # Iterate through every column (particle) of the state matrix and propagate them forward.
     P_t_predict = np.zeros(shape=P_t_prev.shape)
 
+    # every column of the particle set is a particle: a guess of 
+    # (roll, yaw, rolldot, yawdat, v_ang, v_mag, twa, tws)^T
+
     for i in range(NUM_PARTICLES):
-        P_t_predict[:3,i] = propagate_state(P_t_prev[:3,i], u_t) #at this point the weight stays zero
+        P_t_predict[:-1,i] = propagate_state(P_t_prev[:-1,i], u_t) #at this point the weight stays zero
 
     return P_t_predict
+
+def test_calc_meas_prediction:
+    # roll, yaw, rolldot, yawdot, v_ang, v_mag, TWA, TWS
+    x_bar_t = [0, 0, 0, 0, 0, 0, 0, 1] # wind 1 m/s from the east
+    answer = calc_meas_prediction(x_bar_t)
+    print(answer)
+    # expect it to be 
 
 def calc_meas_prediction(x_bar_t):
     """Calculate predicted measurement based on the predicted state
@@ -232,17 +253,43 @@ def calc_meas_prediction(x_bar_t):
     z_bar_t defined as [z_xLL, z_yLL]
     """
 
-    x_t = x_bar_t[0]
-    y_t = x_bar_t[1]
-    theta_t = x_bar_t[2]
-    delta_x = X_LANDMARK - x_t
-    delta_y = Y_LANDMARK - y_t
+    roll      = x_bar_t[0]
+    yaw       = x_bar_t[1]
+    roll_dot  = x_bar_t[2]
+    yaw_dot   = x_bar_t[3]
+    v_ang     = x_bar_t[4]
+    v_mag     = x_bar_t[5]
+    TWA       = x_bar_t[6]
+    TWS       = x_bar_t[7]
 
-    # Tim has the derivation for this
-    z_xLL = np.sin(theta_t) * delta_x - np.cos(theta_t) * delta_y
-    z_yLL = np.cos(theta_t) * delta_x + np.sin(theta_t) * delta_y
+    # convert true wind from polar coordinates to cartesian
+    TWS_x_comp = TWS * np.cos(TWA) # TW East
+    TWS_y_comp = TWS * np.sin(TWA) # TW North
 
-    z_bar_t = np.array([z_xLL, z_yLL])
+    # convert v_boat into cartesian coordinates 
+    # note: this is where the wind is coming from
+    v_G_x = v_mag * np.cos(v_ang)
+    v_G_y = v_mag * np.sin(v_ang)
+
+    # add components to get wind vector relative to boat in global frame
+    app_wind_east   = TWS_x_comp + v_G_x
+    app_wind_north  = TWS_y_comp + v_G_y
+    
+    # rotate into boat frame to get wind vector relative to boat in (starboard, forward) frame
+    app_wind_stb    = app_wind_east * np.sin(yaw) - app_wind_north * np.cos(yaw)
+    app_wind_fwd    = app_wind_east * np.cos(yaw) + app_wind_north * np.sin(yaw)
+
+    # reduce the starboard component by the cosine of the heel (roll) angle
+    # to account for out-of-plane measurement of the wind vector
+    # note: if we want to account for mast twist later, this is where we do it.
+    app_wind_right_of_vane  = app_wind_stb * np.cos(roll) + MAST_HEIGHT * roll_dot * MS_TO_KNOTS
+    app_wind_fwd_of_vane    = app_wind_fwd
+
+    # take the angle and magnitude of the relative wind vector in the vane frame
+    z_AWA = np.arctan2(app_wind_fwd_of_vane, app_wind_right_of_vane)
+    z_AWS = np.linalg.norm([app_wind_right_of_vane, app_wind_fwd_of_vane])
+
+    z_bar_t = np.array([z_AWA, z_AWS])
 
     return z_bar_t
 
@@ -257,9 +304,9 @@ def calc_mean_state(P_t):
     """
     # if we expect our particles to diverge into multiple clumps, we could implement a clustering algorithm here!
     # weighted average of multiple numbers: a*x1 + b*x2 + c*x3 / 3
-    x_mean = np.average(P_t[0,:], weights=P_t[3,:])
-    y_mean = np.average(P_t[1,:], weights=P_t[3,:])
-    theta_mean = np.average(P_t[2,:], weights=P_t[3,:])
+    x_mean = np.average(P_t[0,:], weights=P_t[-1,:])
+    y_mean = np.average(P_t[1,:], weights=P_t[-1,:])
+    theta_mean = np.average(P_t[2,:], weights=P_t[-1,:])
     state_est_t = np.array([x_mean, y_mean, theta_mean])
 
     return state_est_t
@@ -274,20 +321,24 @@ def correction_step(P_t_predict, z_t):
     Returns:
     P_t                 (np.array)    -- the final state matrix estimate of time t
     """
-    normal_object = scipy.stats.norm(0, STDDEV_MEAS_ERR)
+    AWA_normal_object = scipy.stats.norm(0, STDDEV_MEAS_AWA)
+    AWS_normal_object = scipy.stats.norm(0, STDDEV_MEAS_AWS)
 
     # Calculate weight for each particle j
     for j in range(NUM_PARTICLES):
         # calculate what the particle thinks the measurement should be 
-        z_bar_t = calc_meas_prediction(P_t_predict[:3,j])
+        z_bar_t = calc_meas_prediction(P_t_predict[:-1,j])
 
-        # find the geometric distance between z_t and z_pred (Pythagorean theorem)
-        distance = np.linalg.norm(z_t - z_bar_t)
+        # find the distances between z_t and z_pred
+        AWA_err = z_t[0] - z_bar_t[0]
+        AWS_err = z_t[1] - z_bar_t[1]
 
-        # weight is zero-mean normal PDF evaluated at d (what variance?)
-        weight = normal_object.pdf(distance)
+        # weight is zero-mean normal PDF evaluated at d with stddev defined above
+        AWA_weight = AWA_normal_object.pdf(AWA_err)
+        AWS_weight = AWS_normal_object.pdf(AWS_err)
+        comb_weight = AWA_weight * AWS_weight
 
-        P_t_predict[3,j] = weight
+        P_t_predict[-1,j] = comb_weight
 
     # Sample from the set of particles proportional to their weights
     # draw another card from the deck of particle-cards with probability w
@@ -304,37 +355,32 @@ def correction_step(P_t_predict, z_t):
 
 
 def main():
-    """Run a EKF on logged data from IMU and LiDAR moving in a box formation around a landmark"""
+    """Run a PF on logged data from IMU and LiDAR moving in a box formation around a landmark"""
 
-    filepath = "./logs/"
-    filename = "2020_2_26__16_59_7"
-    # filename = "2020_2_26__17_21_59"
-    data, is_filtered = load_data(filepath + filename)
+    filepath = "./"
+    filename = "2019Aug10_revised"
+    data = load_data(filepath + filename)
 
-    # Save filtered data so don't have to process unfiltered data everytime
-    if not is_filtered:
-        data = filter_data(data)
-        save_data(f_data, filepath+filename+"_filtered.csv")
+    pdb.set_trace()
 
     # Load data into variables
-    x_lidar = data["X"]
-    y_lidar = data["Y"]
-    z_lidar = data["Z"]
     time_stamps = data["Time Stamp"]
-    lat_gps = data["Latitude"]
-    lon_gps = data["Longitude"]
-    # Tim changed yaw to radians # Tim is a superstar!
-    yaw_lidar = [wrap_to_pi(x * -np.pi / 180) for x in data["Yaw"]]
-    pitch_lidar = data["Pitch"]
-    roll_lidar = data["Roll"]
-    x_ddot = data["AccelX"]
-    y_ddot = data["AccelY"]
+    lat_gps = data["Lat"]
+    lon_gps = data["Lon"]
+
+    roll = wrap_to_pi(data['Heel'])
+    yaw = wrap_to_pi((pi - data['HDG'])) # HDG is imported w ref N CW, need change into ref E CCW
+    v_ang = wrap_to_pi(pi-data["COG"])  # COG is imported w ref N CW, need change into ref E CCW
+    v_mag = data["SOG"]
+
+    AWA = wrap_to_pi(data["AWA"])
+    AWS = data["AWS"]
 
     lat_origin = lat_gps[0]
     lon_origin = lon_gps[0]
 
     #  Initialize filter
-    N = 3  # number of states
+    N = 8  # number of states
 
     # Randomly generate initial particles from a normal distribution centered around (at 0,0,0)
     # Use small STDDEV_INIT for known start position 
