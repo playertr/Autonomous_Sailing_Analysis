@@ -199,18 +199,18 @@ def motion_uncertainty(sigma_points_pred,mean_bar_t,lmda,alpha,beta):
     """STUDENT CODE START"""
     (n,m) = sigma_points_pred.shape
     R_t = np.zeros((n,1))
-    sigma_x_bar_t = np.zeros((n,1))
+    sigma_x_bar_t = np.zeros((n,n))
     weights = np.zeros(m)
     weights[0] = lmda/(n+lmda) + (1-alpha**2+beta)
     weights[1:] = 1/(2*(n+lmda))
     for i in range(m):
         squared_error = np.matmul((sigma_points_pred[:,i]-mean_bar_t),(sigma_points_pred[:,i]-mean_bar_t).T) #slightly confused why this is a scalar and not a matrix
-        mean_bar_t = mean_bar_t + weights[i]*squared_error+R_t
+        sigma_x_bar_t = np.add(sigma_x_bar_t,weights[i]*squared_error)#make sure these are proper matrix operations
         mean_bar_t[0] = wrap_to_pi(mean_bar_t[0])
         mean_bar_t[1] = wrap_to_pi(mean_bar_t[1])
         mean_bar_t[4] = wrap_to_pi(mean_bar_t[4])
         mean_bar_t[6] = wrap_to_pi(mean_bar_t[6])
-
+    sigma_x_bar_t = np.add(sigma_x_bar_t,R_t)
     
     """STUDENT CODE END"""
 
@@ -403,6 +403,45 @@ def meas_regroup(Z_bar_t,lmda):
 
     return z_bar_t
 
+def meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t, lmda,alpha,beta):
+    """Calculate the Jacobian of your motion model with respect to state
+
+    Parameters:
+    x_t_prev (np.array) -- the previous state estimate
+    u_t (np.array)      -- the current control input
+
+    Returns:
+    G_x_t (np.array)    -- Jacobian of motion model wrt to x
+    """
+    """STUDENT CODE START"""
+    (n,m) = sigma_points_pred_final.shape
+    sigma_z_t = np.zeros((len(z_bar_t[:,0]),len(z_bar_t[:,0])))
+    sigma_bar_xzt = np.zeros((n,n))
+    S_t = np.zeros((n,n))
+    weights = np.zeros(m)
+    weights[0] = lmda/(n+lmda) + (1-alpha**2+beta)
+    weights[1:] = 1/(2*(n+lmda))
+    for i in range(m):
+        squared_error = np.matmul((sigma_points_pred_final[:,i]-mean_bar_t),(Z_bar_t[:,i]-z_bar_t).T)
+        sigma_bar_xzt = np.add(sigma_bar_xzt,weights[i]*squared_error)
+        sigma_bar_xzt[0] = wrap_to_pi(sigma_bar_xzt[0])
+        sigma_bar_xzt[1] = wrap_to_pi(sigma_bar_xzt[1])
+        sigma_bar_xzt[4] = wrap_to_pi(sigma_bar_xzt[4])
+        sigma_bar_xzt[6] = wrap_to_pi(sigma_bar_xzt[6])
+    
+    for i in range(m):
+        squared_error = np.matmul((Z_bar_t[:,i]-z_bar_t),(Z_bar_t[:,i]-z_bar_t).T)
+        S_t = np.add(S_t,weights[i]*squared_error)
+        S_t[0] = wrap_to_pi(S_t[0])
+        S_t[1] = wrap_to_pi(S_t[1])
+        S_t[4] = wrap_to_pi(S_t[4])
+        S_t[6] = wrap_to_pi(S_t[6])
+    S_t = np.add(sigma_bar_xzt,sigma_z_t) #am unsure if this is summed every sigma point or not
+    
+    """STUDENT CODE END"""
+
+    return S_t, sigma_bar_xzt
+
 def correction_step(mean_bar_t, z_t, sigma_x_bar_t, sigma_points_pred_final):
     """Compute the correction of EKF
 
@@ -419,14 +458,14 @@ def correction_step(mean_bar_t, z_t, sigma_x_bar_t, sigma_points_pred_final):
     """STUDENT CODE START"""
     Z_bar_t = calc_meas_sigma_points(sigma_points_pred_final)
     z_bar_t = meas_regroup(Z_bar_t,lmda)
-    S_t,sigma_bar_xzt = meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t)
+    S_t,sigma_bar_xzt = meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t,lmda,alpha,beta)
     K_t = calc_kalman_gain(sigma_bar_xzt,S_t)
-    mean_t = mean_bar_t + np.matmul(K_t,(z_t-z_bar_t))
+    mean_est_t = mean_bar_t + np.matmul(K_t,(z_t-z_bar_t))
     sigma_x_est_t = sigma_x_bar_t - np.mult(K_t,np.matmul(S_t,K_t.T))
 
     """STUDENT CODE END"""
 
-    return [x_est_t, sigma_x_est_t]
+    return [mean_est_t, sigma_x_est_t]
 
 
 def main():
@@ -502,15 +541,7 @@ def main():
         state_est_t, var_est_t = correction_step(state_pred_t,
                                                     z_t,
                                                     var_pred_t)
-        # if t%2 == 1:    
-        #     # Correction Step
-        #     state_est_t, var_est_t = correction_step(state_pred_t,
-        #                                             z_t,
-        #                                             var_pred_t)
-        # else:
-        #     state_est_t, var_est_t = state_pred_t, var_pred_t
-
-        #  For clarity sake/teaching purposes, we explicitly update t->(t-1)
+        
         state_est_t_prev = state_est_t
         var_est_t_prev = var_est_t
 
@@ -526,97 +557,9 @@ def main():
         gps_estimates[:, t] = np.array([x_gps, y_gps])
 
     """STUDENT CODE START"""
-    print('donkeh', covariance_estimates[:,:,0])
-    #make a square:
-    Width = 10
-    square = np.array([[0,0]])
-    square_x= []
-    square_y= [] 
-    for i in range(Width):
-        square_x.append(0)
-        square_x.append(i)
-        square_x.append(Width)
-        square_x.append(i)
-        square_y.append(i)
-        square_y.append(0)
-        square_y.append(i)
-        square_y.append(Width)
-        # square = np.concatenate((square,[[0,i]]), axis=0)
-        # square =np.concatenate((square,[[i,0]]), axis=0)
-        # square = np.concatenate((square,[[Width,i]]), axis=0)
-        # square = np.concatenate((square,[[i,Width]]), axis=0)
-    squarex = [0,10,10,0,0]
-    squarey = [0,0,-10,-10,0]
-    plt.plot(state_estimates[0,:],state_estimates[1,:],'rx',label='estimates')
-    # print(square)
-    plt.plot(squarex,squarey,label='expected path')
-    plt.plot(gps_estimates[0,:],gps_estimates[1,:],':',label='GPS Measurements')
-    plt.ylabel('y position (m)')
-    plt.xlabel('x position (m)')
-    plt.legend(loc='best')
-    plt.show()
+    #plotting yeahhhh
 
-    #state estimate plot
-    fig, ax = plt.subplots(1,1)
-    ax.plot(state_estimates[0,:],state_estimates[1,:],'r-.',label='estimates')
-    ax.plot(gps_estimates[0,:],gps_estimates[1,:],':',label='GPS Measurements')
-    ax.plot(squarex,squarey,label='expected path')
-    ax.set_xlabel('x position (m)')
-    ax.set_ylabel('y position (m)')
-    ax.legend(loc='best')
-    e1 = patches.Ellipse((state_estimates[0,400], state_estimates[1,400]), covariance_estimates[0,0,400], covariance_estimates[1,1,400],
-                     angle=state_estimates[2,100]+np.pi/2, linewidth=2, fill=False, zorder=2)
-    print('first elipse', covariance_estimates[0,0,100], covariance_estimates[1,1,100])
-    e2 = patches.Ellipse((state_estimates[0,0], state_estimates[1,0]), covariance_estimates[0,0,0], covariance_estimates[1,1,0],
-                     angle=state_estimates[2,0]+np.pi/2, linewidth=2, fill=False, zorder=2)
-    ax.add_patch(e2)
-    # ax.add_patch(e2)
-    plt.show()
-
-    #yaw angle over time
-    fig, ax = plt.subplots(1,1)
-    ax.plot(np.arange(len(state_estimates[2,:]))*DT,state_estimates[2,:])
-    ax.set_xlabel('time (s)')
-    ax.set_ylabel('yaw angle (rad)')
-    plt.show()
-
-    #covariance matrix diagonals over time.
-    fig, ax = plt.subplots(3,1)
-    ax[0].plot(np.arange(len(covariance_estimates[0,0,:]))*DT,covariance_estimates[0,0,:])
-    ax[0].set_xlabel('time (s)')
-    ax[0].set_ylabel('X Covariance')
-    ax[1].plot(np.arange(len(covariance_estimates[1,1,:]))*DT,covariance_estimates[1,1,:])
-    ax[1].set_xlabel('time (s)')
-    ax[1].set_ylabel('Y Covariance')
-    ax[2].plot(np.arange(len(covariance_estimates[2,2,:]))*DT,covariance_estimates[2,2,:])
-    ax[2].set_xlabel('time (s)')
-    ax[2].set_ylabel('Theta Covariances')
-    plt.show()
-
-    #RMS error (not robust)
-    error = []
-    residuals = []
-    for i in range(len(state_estimates[0,:])):
-        x = state_estimates[0,i]
-        print('yeegdo', x)
-        y = state_estimates[1,i]
-        if x >= 0 and x <=10:
-            if y>-5:
-                distance = y**2
-            else:
-                distance = (-10-y)**2
-        elif  x< 0 or x >10:
-            if x>5:
-                distance = (10-x)**2
-            else:
-                distance = (x)**2
-        residuals.append(distance)
-        error.append(np.sqrt(np.mean(residuals)))
-    fig,ax = plt.subplots(1,1)
-    ax.plot(np.arange(len(error))*DT,error)
-    ax.set_xlabel('time (s)')
-    ax.set_ylabel('RMS Tracking Error (m)')
-    plt.show()
+   
 
     """STUDENT CODE END"""
     return 0
