@@ -1,11 +1,34 @@
 """
-Author: Andrew Q. Pham
-Email: apham@g.hmc.edu
-Date of Creation: 2/26/20
+Author: Tim Player, Jane Cho Watts, Alex Moody (aka the Salty Seapeople)
+Email: tplayer@hmc.edu, jwatts@hmc.edu, amoody@hmc.edu
+Date of Creation: 4/23/20
 Description:
-    Extended Kalman Filter implementation to filtering localization estimate
-    This code is for teaching purposes for HMC ENGR205 System Simulation Lab 3
-    Student code version with parts omitted.
+    Particle Filter implementation to filtering true wind estimate estimate
+    This code is for our Final Project of E205 - Systems Simulation.
+
+                                  |
+                                  |
+                                  |
+                          |       |
+                          |      ---
+                         ---     '-'
+                         '-'  ____|_____
+                      ____|__/    |    /
+                     /    | /     |   /
+                    /     |(      |  (
+                   (      | \     |   \
+                    \     |  \____|____\   /|
+                    /\____|___`---.----` .' |
+                .-'/      |  \    |__.--'    \
+              .'/ (       |   \   |.          \
+           _ /_/   \      |    \  | `.         \
+            `-.'    \.--._|.---`  |   `-._______\
+               ``-.-------'-------'------------/
+                   `'._______________________.' 
+
+                   Are you to ready set sail, sea people? -Jane
+                   Sea people? I hardly sea any people at all during the quarantine! -Tim
+                   Quarantine? More like brigantine! -Alex
 """
 
 import csv
@@ -19,7 +42,7 @@ import pdb
 from scipy.stats import norm
 import scipy
 
-NUM_PARTICLES   = 1000
+NUM_PARTICLES   = 100
 MAST_HEIGHT     = 33 # meters
 MS_TO_KNOTS     = 1.944 # knots per m/s
 
@@ -191,12 +214,12 @@ def propagate_state(x_t_prev, u_t):
     u_t  (float)         -- the control input 
     control vector is (roll_meas, yaw_meas, v_ang_meas, v_mag_meas)
     """
-    u_roll      = u[0]
-    u_yaw       = u[1]
+    u_roll      = u_t[0]
+    u_yaw       = u_t[1]
     x_roll      = x_t_prev[0]
     x_yaw       = x_t_prev[1]
-    u_v_ang     = u[2]
-    u_v_mag     = u[3]
+    u_v_ang     = u_t[2]
+    u_v_mag     = u_t[3]
     x_TWA       = x_t_prev[6]
     x_TWS       = x_t_prev[7]
 
@@ -233,14 +256,36 @@ def prediction_step(P_t_prev, u_t):
     for i in range(NUM_PARTICLES):
         P_t_predict[:-1,i] = propagate_state(P_t_prev[:-1,i], u_t) #at this point the weight stays zero
 
-    return P_t_predict
+    return P_t_predict  
 
-def test_calc_meas_prediction:
+def test_calc_meas_prediction():
     # roll, yaw, rolldot, yawdot, v_ang, v_mag, TWA, TWS
-    x_bar_t = [0, 0, 0, 0, 0, 0, 0, 1] # wind 1 m/s from the east
+    x_bar_t = [0, 0, 0, 0, 0, 0, 0, 1] # wind 1 m/s from the east, boat holding still, facing east
     answer = calc_meas_prediction(x_bar_t)
+    print("Expected answer: [pi/2,1]")
     print(answer)
-    # expect it to be 
+
+    x_bar_t = [0, 0, 0, 0, 0, 3, 0, 1] # wind 1 m/s from the east, boat moving east, facing east
+    answer = calc_meas_prediction(x_bar_t)
+    print("Expected answer: [pi/2,4]")
+    print(answer)
+
+    x_bar_t = [45 * np.pi/180, 0, 0, 0, 0, 3, 0, 1] # wind 1 m/s from the east, boat moving east, facing east, heeled
+    answer = calc_meas_prediction(x_bar_t)
+    print("Expected answer: [pi/2,1]")
+    print(answer)
+
+    x_bar_t = [45 * np.pi/180, 0, 0, 0, 0, 0, np.pi/2, 1] # wind 1 m/s from the North, boat stopped and facing east, heeled
+    answer = calc_meas_prediction(x_bar_t)
+    print("Expected answer: [pi,sqrt(2)/2")
+    print(answer)
+
+    x_bar_t = [45 * np.pi/180, 0, 0, 0, 0, 1, np.pi/2, 1] # wind 1 m/s from the North, boat moving and facing east, heeled
+    answer = calc_meas_prediction(x_bar_t)
+    print("Expected answer: [fronter left,less than 1]")
+    print(answer)
+
+    # expect it to be (0, 1)
 
 def calc_meas_prediction(x_bar_t):
     """Calculate predicted measurement based on the predicted state
@@ -304,10 +349,17 @@ def calc_mean_state(P_t):
     """
     # if we expect our particles to diverge into multiple clumps, we could implement a clustering algorithm here!
     # weighted average of multiple numbers: a*x1 + b*x2 + c*x3 / 3
-    x_mean = np.average(P_t[0,:], weights=P_t[-1,:])
-    y_mean = np.average(P_t[1,:], weights=P_t[-1,:])
-    theta_mean = np.average(P_t[2,:], weights=P_t[-1,:])
-    state_est_t = np.array([x_mean, y_mean, theta_mean])
+    roll_mean       = np.average(P_t[0,:], weights=P_t[-1,:])
+    yaw_mean        = np.average(P_t[1,:], weights=P_t[-1,:])
+    roll_dot_mean   = np.average(P_t[2,:], weights=P_t[-1,:])
+    yaw_dot_mean    = np.average(P_t[3,:], weights=P_t[-1,:])
+    v_ang_mean      = np.average(P_t[4,:], weights=P_t[-1,:])
+    v_mag_dot_mean  = np.average(P_t[5,:], weights=P_t[-1,:])
+    TWA_mean        = np.average(P_t[6,:], weights=P_t[-1,:])
+    TWS_mean        = np.average(P_t[7,:], weights=P_t[-1,:])
+
+
+    state_est_t = np.array([roll_mean, yaw_mean, roll_dot_mean, yaw_dot_mean, v_ang_mean, v_mag_dot_mean, TWA_mean, TWS_mean])
 
     return state_est_t
 
@@ -360,24 +412,26 @@ def main():
     filepath = "./"
     filename = "2019Aug10_revised"
     data = load_data(filepath + filename)
-
-    pdb.set_trace()
+    
+    # remove all nan values
+    for key in data.keys():
+        data[key] = map(lambda x: 0 if np.isnan(x) else x, data[key])
 
     # Load data into variables
-    time_stamps = data["Time Stamp"]
+    time_stamps = data["Timestamp"]
     lat_gps = data["Lat"]
     lon_gps = data["Lon"]
-
-    roll = wrap_to_pi(data['Heel'])
-    yaw = wrap_to_pi((pi - data['HDG'])) # HDG is imported w ref N CW, need change into ref E CCW
-    v_ang = wrap_to_pi(pi-data["COG"])  # COG is imported w ref N CW, need change into ref E CCW
-    v_mag = data["SOG"]
-
-    AWA = wrap_to_pi(data["AWA"])
-    AWS = data["AWS"]
-
+    u_roll  = [wrap_to_pi(x * np.pi/180) for x in data['Heel']]         # ref mast, to the right side of the boat
+    u_yaw   = [wrap_to_pi(np.pi - x*np.pi/180) for x in data['HDG']]  # HDG is changed into ref E CCW, initially imported w ref N CW 
+    u_v_ang = [wrap_to_pi(np.pi- x*np.pi/180) for x in data["COG"]]   # COG is changed into ref E CCW, initially imported w ref N CW
+    u_v_mag = data["SOG"]          
+    z_AWA = [wrap_to_pi(np.pi - x*np.pi/180) for x in data["AWA"]]    # AWA is changed into ref E CCW, initially imported w ref N CW
+    z_AWS = data["AWS"]
+    data_TWA = [wrap_to_pi(np.pi - x*np.pi/180) for x in data["TWA"]] # TWA is changed into ref E CCW, initially imported w ref N CW
+    data_TWS = data["TWS"]
     lat_origin = lat_gps[0]
     lon_origin = lon_gps[0]
+
 
     #  Initialize filter
     N = 8  # number of states
@@ -386,25 +440,25 @@ def main():
     # Use small STDDEV_INIT for known start position 
     # Use large STDDEV_INIT for random start position
     P_t_prev = np.random.normal(25,STDDEV_INIT, size=(N+1,NUM_PARTICLES))
-    P_t_prev[-1, :] = 1.0 / NUM_PARTICLES # assign equal weights to all paqurticles
-    # P_t_prev[-1, :] = P[-1,:] / sum(P[-1,:]) 
+    P_t_prev[-1, :] = 1.0 / NUM_PARTICLES # assign equal weights to all particles
 
 
     state_estimates = np.empty((N, len(time_stamps)))
     gps_estimates = np.empty((2, len(time_stamps)))
     errorsq = np.empty(len(time_stamps))
-    RMSE = np.empty(len(time_stamps))
+    RMSE_TWA = np.empty(len(time_stamps))
+    RMSE_TWs = np.empty(len(time_stamps))
 
     #  Run filter over data
     for t, _ in enumerate(time_stamps):
         # Get control input
-        u_t = yaw_lidar[t]
+        u_t = np.array([u_roll[t], u_yaw[t], u_v_ang[t], u_v_mag[t]])
 
         # Prediction Step
         P_t_predict = prediction_step(P_t_prev, u_t)
 
         # Get measurement
-        z_t = np.array([x_lidar[t], y_lidar[t]])
+        z_t = np.array([z_AWA[t], z_AWS[t]])
 
         # Correction Step
         P_t, state_est_t = correction_step(P_t_predict, z_t)
@@ -422,56 +476,48 @@ def main():
         gps_estimates[:, t] = np.array([x_gps, y_gps])
 
         # RMSE
-            # expected_path_x = 0 to 10 to 10 back to 0 to 0
-            # expected_path_y = 0 to  0 to -10 to -10 back to 0
-            # written for Lab 3
-        if (0 < t < 220):
-            errorsq[t] = (0 - state_est_t[1])**2
-        elif (220 < t < (420 + 6.9)): #b4l2a0z6e9it
-            errorsq[t] = (10 - state_est_t[0])**2
-            #print(state_est_t[1])
-        elif (421 < t < 605):
-            errorsq[t] = (-10 - state_est_t[1])**2
-        else: # 600 < t < 810
-            errorsq[t] = (0 - state_est_t[0])**2
-        RMSE[t] = np.sqrt(np.sum(errorsq[0:t]/t))
+        # errorsq_TWA[t] = (data_TWA - state_est_t[6])**2
+        # errorsq_TWS[t] = (data_TWS - state_est_t[7])**2
+        # RMSE_TWA[t] = np.sqrt(np.sum(errorsq_TWA[0:t]/t))
+        # RMSE_TWS[t] = np.sqrt(np.sum(errorsq_TWS[0:t]/t))
 
-        # Plot Results
-        # Plot Estimated Path & Expected Path & GPS
-        # Path tracking error 
-        plt.figure(1)
-        plt.plot(gps_estimates[0],
-                        gps_estimates[1], 'b.', label='GPS (Expected Path)',zorder=40)
-        if np.mod(t, 30) == 0:
-            plt.figure(1)
-            plt.quiver(state_estimates[0, t], state_estimates[1, t], np.cos(
-                state_estimates[2, t]), np.sin(state_estimates[2, t]), color='r',label='Estimated State', zorder=50)
+        # # Plot Results
+        # plt.figure(1)
+        # plt.plot(gps_estimates[0],
+        #                 gps_estimates[1], 'b.', label='GPS (Expected Path)',zorder=40)
+        # if np.mod(t, 30) == 0:
+        #     plt.figure(1)
+        #     plt.quiver(state_estimates[0, t], state_estimates[1, t], np.cos(
+        #         state_estimates[2, t]), np.sin(state_estimates[2, t]), color='r',label='Estimated State', zorder=50)
 
-            skip_num = 40
-            plt.scatter(P_t[0,::skip_num], P_t[1,::skip_num], color='g', label='Particles', s=2, zorder=10)
-            plt.xlim(-4, 14)
-            plt.ylim(-14, 4)
-            plt.xlabel('East (m)')
-            plt.ylabel('North (m)')
-            if t == 0:
-                expected_path_x = [0, 10, 10, 0, 0]
-                expected_path_y = [0, 0, -10, -10, 0]
-                plt.plot(expected_path_x,expected_path_y, 'k', label='Perfect Path', zorder=0, linewidth=2)
-                plt.plot(X_LANDMARK,Y_LANDMARK, 'mo', label='Landmark Location')
-                plt.legend()
-            plt.pause(0.0001)
+        #     skip_num = 40
+        #     plt.scatter(P_t[0,::skip_num], P_t[1,::skip_num], color='g', label='Particles', s=2, zorder=10)
+        #     plt.xlim(-4, 14)
+        #     plt.ylim(-14, 4)
+        #     plt.xlabel('East (m)')
+        #     plt.ylabel('North (m)')
+        #     if t == 0:
+        #         expected_path_x = [0, 10, 10, 0, 0]
+        #         expected_path_y = [0, 0, -10, -10, 0]
+        #         plt.plot(expected_path_x,expected_path_y, 'k', label='Perfect Path', zorder=0, linewidth=2)
+        #         plt.plot(X_LANDMARK,Y_LANDMARK, 'mo', label='Landmark Location')
+        #         plt.legend()
+        #     plt.pause(0.0001)
 
-        plt.figure(2)
-        plt.plot(t, errorsq[t], 'k.')
+        # plt.figure(2)
+        # plt.plot(t, errorsq[t], 'k.')
 
-        plt.xlabel('Timestep (0.1 s)')
-        plt.ylabel('Squared Error (m^2)')
-        if t == 0:
-            plt.legend()
+        # plt.xlabel('Timestep (0.1 s)')
+        # plt.ylabel('Squared Error (m^2)')
+        # if t == 0:
+        #     plt.legend()
 
-        print(t)
-        plt.pause(0.0001)
+        # print(t)
+        # plt.pause(0.0001)
+
+    pdb.set_trace()
     print(RMSE[-1])
+
     plt.show()
     return 0
 
