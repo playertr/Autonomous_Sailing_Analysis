@@ -1,11 +1,34 @@
 """
-Author: Andrew Q. Pham
+Author: Jane Watts, Tim Player, Alex Moody
 Email: apham@g.hmc.edu
-Date of Creation: 2/26/20
+Date of Creation: 4/23/20
 Description:
-    Extended Kalman Filter implementation to filtering localization estimate
-    This code is for teaching purposes for HMC ENGR205 System Simulation Lab 3
-    Student code version with parts omitted.
+    Unscented Kalman Filter implementation for filtering true wind estimate
+    This code is for sailors or anyone who identifies as a saltyseaperson.
+
+                                  |
+                                  |
+                                  |
+                          |       |
+                          |      ---
+                         ---     '-'
+                         '-'  ____|_____
+                      ____|__/    |    /
+                     /    | /     |   /
+                    /     |(      |  (
+                   (      | \     |   \
+                    \     |  \____|____\   /|
+                    /\____|___`---.----` .' |
+                .-'/      |  \    |__.--'    \
+              .'/ (       |   \   |.          \
+           _ /_/   \      |    \  | `.         \
+            `-.'    \.--._|.---`  |   `-._______\
+               ``-.-------'-------'------------/
+                   `'._______________________.' 
+
+                   Are you to ready set sail, sea people? -Jane
+                   Sea people? I hardly sea any people at all during the quarantine! -Tim
+                   Quarantine? More like brigantine! -Alex
 """
 
 import csv
@@ -285,7 +308,7 @@ def prediction_step(mean_t_prev, u_t, sigma_t_prev):
     
     """STUDENT CODE END"""
 
-    return [mean_bar_t, sigma_x_bar_t, sigma_points_pred_final]
+    return mean_bar_t, sigma_x_bar_t, sigma_points_pred_final
 
 
 def calc_meas_sigma_points(sigma_points_pred_final):
@@ -471,41 +494,30 @@ def correction_step(mean_bar_t, z_t, sigma_x_bar_t, sigma_points_pred_final):
 def main():
     """Run a EKF on logged data from IMU and LiDAR moving in a box formation around a landmark"""
 
-    filepath = ""
-    filename = '2020_2_26__16_59_7_filtered'
-    data, is_filtered = load_data(filepath + filename)
-
-    '''
-    # Save filtered data so don't have to process unfiltered data everytime
-    if not is_filtered:
-        data = filter_data(data)
-        save_data(f_data, filepath+filename+"_filtered.csv")
-    '''
+    filepath = "./"
+    filename = "2019Aug10_revised"
+    data = load_data(filepath + filename)
 
     # Load data into variables
-    x_lidar = data["X"]
-    y_lidar = data["Y"]
-    z_lidar = data["Z"]
-    time_stamps = data["Time Stamp"]
-    lat_gps = data["Latitude"]
-    lon_gps = data["Longitude"]
-    yaw_lidar = data["Yaw"]
-    pitch_lidar = data["Pitch"]
-    roll_lidar = data["Roll"]
-    x_ddot = data["AccelX"]
-    y_ddot = data["AccelY"]
-
-    #plt.plot(list(map(wrap_to_pi, [-i*np.pi/180 for i in yaw_lidar])))
-    #plt.plot(yaw_lidar)
-    #plt.show()
-
+    time_stamps = data["Timestamp"]
+    lat_gps = data["Lat"]
+    lon_gps = data["Lon"]
+    u_roll  = [wrap_to_pi(x * np.pi/180) for x in data['Heel']]         # ref mast, to the right side of the boat
+    u_yaw   = [wrap_to_pi(np.pi - x*np.pi/180) for x in data['HDG']]  # HDG is changed into ref E CCW, initially imported w ref N CW 
+    u_v_ang = [wrap_to_pi(np.pi- x*np.pi/180) for x in data["COG"]]   # COG is changed into ref E CCW, initially imported w ref N CW
+    u_v_mag = data["SOG"]          
+    z_AWA = [wrap_to_pi(np.pi - x*np.pi/180) for x in data["AWA"]]    # AWA is changed into ref E CCW, initially imported w ref N CW
+    z_AWS = data["AWS"]
+    data_TWA = [wrap_to_pi(np.pi - x*np.pi/180) for x in data["TWA"]] # TWA is changed into ref E CCW, initially imported w ref N CW
+    data_TWS = data["TWS"]
     lat_origin = lat_gps[0]
     lon_origin = lon_gps[0]
 
+
     #  Initialize filter
     """STUDENT CODE START"""
-    N = 7 # number of states
-    state_est_t_prev = np.array([0,0,0,0,0,0,0]) #initial state assum global (0,0) is at northwest corner
+    N = 8  # number of states
+    state_est_t_prev = np.array([u_roll[0],u_yaw[0],0,0,u_v_ang[0],u_v_mag[0],data_TWA[0],data_TWS[0]]) #initial state assum global (0,0) is at northwest corner
     var_est_t_prev = np.identity(N)
 
     state_estimates = np.zeros((N, len(time_stamps)))
@@ -515,38 +527,33 @@ def main():
     state_estimates[:,-1] = state_est_t_prev
     covariance_estimates[:,:,-1] = var_est_t_prev
 
-    #plotting stuff
-    theta_diff= []
+  
     """STUDENT CODE END"""
 
     #  Run filter over data
     for t, _ in enumerate(time_stamps):
         # Get control input
         """STUDENT CODE START"""
-        transform = np.array([[np.cos(state_est_t_prev[2]), -np.sin(state_est_t_prev[2]),0],[np.sin(state_est_t_prev[2]), np.cos(state_est_t_prev[2]),0],[0,0,1]])
-        u_t = np.array([[x_ddot[t]], [y_ddot[t]],[wrap_to_pi(-yaw_lidar[t]*(np.pi/180))]])
-        u_t_global = np.matmul(transform,u_t)
+        u_t = np.array([u_roll[t],u_yaw[t],u_v_ang[t],u_v_mag[t]])
         state_est_t_prev = state_estimates[:,t-1]
         var_est_t_prev = covariance_estimates[:,:,t-1]
         """STUDENT CODE END"""
 
         # Prediction Step
-        state_pred_t, var_pred_t = prediction_step(state_est_t_prev, u_t_global, var_est_t_prev)
+        state_pred_t, var_pred_t, sigma_points_pred= prediction_step(state_est_t_prev,u_t,var_est_t_prev)
 
         # Get measurement
         """STUDENT CODE START"""
-        z_t = np.array([[x_lidar[t]],[y_lidar[t]],[wrap_to_pi(-yaw_lidar[t]*(np.pi/180))]])
+        z_t = np.array([z_AWA[t],z_AWS[t]]).T
         """STUDENT CODE END"""
         #Correction Step
-        state_est_t, var_est_t = correction_step(state_pred_t,
-                                                    z_t,
-                                                    var_pred_t)
+        state_est_t, var_est_t = correction_step(state_pred_t,z_t,var_pred_t,sigma_points_pred)
         
         state_est_t_prev = state_est_t
         var_est_t_prev = var_est_t
 
         # Log Data
-        state_est_t.shape = (7,)
+        state_est_t.shape = (N,)
         state_estimates[:, t] = state_est_t
         covariance_estimates[:, :, t] = var_est_t
 
