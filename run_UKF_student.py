@@ -4,7 +4,7 @@ Email: apham@g.hmc.edu
 Date of Creation: 4/23/20
 Description:
     Unscented Kalman Filter implementation for filtering true wind estimate
-    This code is for sailors or anyone who identifies as a saltyseaperson.
+    This  is for sailors or anyone who identifies as a saltyseaperson.
 
                                   |
                                   |
@@ -50,7 +50,7 @@ Y_LANDMARK = -5.  # meters
 EARTH_RADIUS = 6.3781E6  # meters
 MAST_HEIGHT = 10
 MS_TO_KNOTS = 1 #get correct value for this
-lmda = 1
+lmda = 1 #parameters to stretch or condense sigma points
 alpha = 1
 beta = 1
 
@@ -184,88 +184,99 @@ def propogate_state(sigma_points, u_t):
     """Propogate/predict the state based on chosen motion model
 
     Parameters:
-    x_t_prev (np.array)  -- the previous state estimate
-    u_t (np.array)       -- the current control input
+    sigma_points (np.array)  -- sigma points based off of previous estimate
+    u_t (np.array)           -- the current control input
 
     Returns:
-    x_bar_t (np.array)   -- the predicted state
+    sigma_points_pred (np.array)   -- the predicted state matrix
     """
-    """STUDENT CODE START"""
-    
+    #update state with input
     (n,m)= sigma_points.shape
+    #reshape matrix for operatiosn
+    sigma_points.shape = (n,1,m)
+    #initialize predicted sigma points
     sigma_points_pred = np.zeros((n,m))
+    #motion model
     for i in range(m): 
-        sigma_points_pred[0,i] = u_t[0]
-        sigma_points_pred[1,i] = u_t[1]
-        sigma_points_pred[2,i] = wrap_to_pi(u_t[0]-sigma_points[0,i])/DT
-        sigma_points_pred[3,i] = wrap_to_pi(u_t[1]-sigma_points[1,i])/DT
-        sigma_points_pred[4,i] = u_t[2]
-        sigma_points_pred[5,i] = u_t[3]
-        sigma_points_pred[6,i] = sigma_points[6,i]
-        sigma_points_pred[7,i] = sigma_points[7,i]
-    sigma_points_pred = sigma_points
-    """STUDENT CODE END"""
-
+        sigma_points_pred[0,i] = u_t[0,0]
+        sigma_points_pred[1,i] = u_t[1,0]
+        sigma_points_pred[2,i] = wrap_to_pi(u_t[0,0]-sigma_points[0,0,i])/DT
+        sigma_points_pred[3,i] = wrap_to_pi(u_t[1,0]-sigma_points[1,0,i])/DT
+        sigma_points_pred[4,i] = u_t[2,0]
+        sigma_points_pred[5,i] = u_t[3,0]
+        sigma_points_pred[6,i] = sigma_points[6,0,i]
+        sigma_points_pred[7,i] = sigma_points[7,0,i]
     return sigma_points_pred
 
 
-def motion_uncertainty(sigma_points_pred,mean_bar_t,lmda,alpha,beta):
-    """Calculate the Jacobian of your motion model with respect to state
+def motion_uncertainty(sigma_points_pred,mean_bar_t):
+    """calculate the covariance matrix resulting from the prediction step
 
     Parameters:
-    x_t_prev (np.array) -- the previous state estimate
-    u_t (np.array)      -- the current control input
+    mean_t_prev (np.array)          -- the previous state estimate
+    sigma_points_pred (np.array)    -- predicted state matrix
 
     Returns:
-    G_x_t (np.array)    -- Jacobian of motion model wrt to x
+    sigma_x_bar_t (np.array)        -- predicted covariance matrix
     """
-    """STUDENT CODE START"""
+    #get input array shape
     (n,m) = sigma_points_pred.shape
-    R_t = np.zeros((n,1))
+    #shape array for matrix operations
+    sigma_points_pred.shape = (n,1,m)
+    #motion model noise
+    R_t = np.identity(n) #update with correct value
+    #initialize output array
     sigma_x_bar_t = np.zeros((n,n))
+    #calculate weights
     weights = np.zeros(m)
     weights[0] = lmda/(n+lmda) + (1-alpha**2+beta)
     weights[1:] = 1/(2*(n+lmda))
+    #loop through sigma points and add error (using loop bc wrap to pi issues)
     for i in range(m):
-        squared_error = np.matmul((sigma_points_pred[:,i]-mean_bar_t),(sigma_points_pred[:,i]-mean_bar_t).T) #slightly confused why this is a scalar and not a matrix
-        sigma_x_bar_t = np.add(sigma_x_bar_t,weights[i]*squared_error)#make sure these are proper matrix operations
-        mean_bar_t[0] = wrap_to_pi(mean_bar_t[0])
-        mean_bar_t[1] = wrap_to_pi(mean_bar_t[1])
-        mean_bar_t[4] = wrap_to_pi(mean_bar_t[4])
-        mean_bar_t[6] = wrap_to_pi(mean_bar_t[6])
-    sigma_x_bar_t = np.add(sigma_x_bar_t,R_t)
-    
-    """STUDENT CODE END"""
+        sigma_points_error = np.subtract(sigma_points_pred[:,:,i],mean_bar_t)
+        sigma_points_error[0,0] = wrap_to_pi(sigma_points_error[0,0])
+        sigma_points_error[1,0] = wrap_to_pi(sigma_points_error[1,0])
+        sigma_points_error[4,0] = wrap_to_pi(sigma_points_error[4,0])
+        sigma_points_error[6,0] = wrap_to_pi(sigma_points_error[6,0])
 
+        squared_error = np.matmul(sigma_points_error,sigma_points_error.T)
+        sigma_x_bar_t = np.add(sigma_x_bar_t,weights[i]*squared_error)
+        
+    sigma_x_bar_t = np.add(sigma_x_bar_t,R_t) #confirm R_t is not included in summation
+    
     return sigma_x_bar_t
 
 
 def motion_regroup(sigma_points_pred,lmda):
-    """Calculate the Jacobian of motion model with respect to control input
+    """regroups the predicted sigma points using a weighted average
 
     Parameters:
-    x_t_prev (np.array)     -- the previous state estimate
-    u_t (np.array)          -- the current control input
+    sigma_points_pred (np.array)     -- predicted sigma points
 
     Returns:
-    G_u_t (np.array)        -- Jacobian of motion model wrt to u
+    mean_bar_t (np.array)            -- predicted state estimate
     """
 
-    """STUDENT CODE START"""
+    #get input matrix shape
     (n,m)= sigma_points_pred.shape
+    #reshape for matrix operations
+    sigma_points_pred.shape = (n,1,m)
+    #initialize output array
     mean_bar_t = np.zeros((n,1))
+    #calc weights
     weights = np.zeros(m)
     weights[0] = lmda/(n+lmda)
     weights[1:] = 1/(2*(n+lmda))
+    #regrou equation
     for i in range(m):
-        mean_bar_t = mean_bar_t + weights[i]*sigma_points_pred[:,i]
-        mean_bar_t[0] = wrap_to_pi(mean_bar_t[0])
-        mean_bar_t[1] = wrap_to_pi(mean_bar_t[1])
-        mean_bar_t[4] = wrap_to_pi(mean_bar_t[4])
-        mean_bar_t[6] = wrap_to_pi(mean_bar_t[6])
+        mean_bar_t = np.add(mean_bar_t,weights[i]*sigma_points_pred[:,:,i])
+        mean_bar_t[0,0] = wrap_to_pi(mean_bar_t[0,0])
+        mean_bar_t[1,0] = wrap_to_pi(mean_bar_t[1,0])
+        mean_bar_t[4,0] = wrap_to_pi(mean_bar_t[4,0])
+        mean_bar_t[6,0] = wrap_to_pi(mean_bar_t[6,0])
 
-    """STUDENT CODE END"""
-
+    #reshape sigma points to match outside dimensions
+    sigma_points_pred.shape = (n,m)
     return mean_bar_t
 
 def calc_sigma_points(mean_t_prev, sigma_t_prev, lmda):
@@ -278,55 +289,58 @@ def calc_sigma_points(mean_t_prev, sigma_t_prev, lmda):
     Returns:
     sigma_points (np.array)        -- state matrix
     """
-    n,m = np.shape(mean_t_prev)
+    (n,m) = np.shape(mean_t_prev)
+
+    #how dow we deal with negative covariances in sqrt?
     sigma_points = np.zeros((n,2*n +1))
-    sigma_points[:,0] =mean_t_prev
-    sigma_points[:,1:n+1] = mean_t_prev + np.sqrt((n+lmda)*sigma_t_prev)[0:n] #check indexing/wrap to pi
+    sigma_points[:,0] =mean_t_prev[:,0]
+    sigma_points[:,1:n+1] = mean_t_prev + np.sqrt((n+lmda)*sigma_t_prev)[0:n] #do we need to wrap sigma values?
     sigma_points[:,n+1:] = mean_t_prev + np.sqrt((n+lmda)*sigma_t_prev)[0:n]
     return sigma_points
 
 
 def prediction_step(mean_t_prev, u_t, sigma_t_prev):
-    """Compute the prediction of EKF
+    """Compute the prediction of UKF
 
     Parameters:
-    x_t_prev (np.array)         -- the previous state estimate
-    u_t (np.array)              -- the control input
-    sigma_x_t_prev (np.array)   -- the previous variance estimate
+    mean_t_prev (np.array)              -- the previous state estimate
+    u_t (np.array)                      -- the control input
+    sigma_t_prev (np.array)             -- the previous variance estimate
 
     Returns:
-    x_bar_t (np.array)          -- the predicted state estimate of time t
-    sigma_x_bar_t (np.array)    -- the predicted variance estimate of time t
+    mean_bar_t (np.array)               -- the predicted state estimate of time t
+    sigma_x_bar_t (np.array)            -- the predicted variance estimate of time t
+    sigma_points_pred_final (np.array)  -- the predicted sigma points
     """
 
-    """STUDENT CODE START"""
     sigma_points = calc_sigma_points(mean_t_prev, sigma_t_prev, lmda)
     sigma_points_pred = propogate_state(sigma_points,u_t)
     mean_bar_t = motion_regroup(sigma_points_pred,lmda)
-    sigma_x_bar_t = motion_uncertainty(sigma_points_pred,mean_bar_t,lmda,alpha,beta)
+    sigma_x_bar_t = motion_uncertainty(sigma_points_pred,mean_bar_t)
     sigma_points_pred_final = calc_sigma_points(mean_bar_t,sigma_x_bar_t,lmda)
     
-    """STUDENT CODE END"""
+    
 
     return mean_bar_t, sigma_x_bar_t, sigma_points_pred_final
 
 
 def calc_meas_sigma_points(sigma_points_pred_final):
-    """Calculate the Jacobian of your measurment model with respect to state
+    """Calculates predicted measurements for each sigma point
 
     Parameters:
-    x_bar_t (np.array)  -- the predicted state
+    sigma_points_pred_final (np.array)  -- the predicted state matrix
 
     Returns:
-    H_t (np.array)      -- Jacobian of measurment model
+    Z_bar_t (np.array)                  -- measurement matrix (2x17)
     """
-    """STUDENT CODE START"""
+    """  """
     (n,m)= sigma_points_pred_final.shape
+    #initialize output array
     Z_bar_t = np.zeros((2,m))
     for i in range(m): 
         Z_bar_t[:,i] = calc_meas_prediction(sigma_points_pred_final[:,i])
     
-    """STUDENT CODE END"""
+    """  """
 
     return Z_bar_t
 
@@ -335,15 +349,13 @@ def calc_kalman_gain(sigma_bar_xzt,S_t):
     """Calculate the Kalman Gain
 
     Parameters:
-    sigma_x_bar_t (np.array)  -- the predicted state covariance matrix
-    H_t (np.array)            -- the measurement Jacobian
+    sigma_bar_xzt (np.array)  -- the cross covariance matrix
+    S_t (np.array)            -- the measurement uncertainty
 
     Returns:
     K_t (np.array)            -- Kalman Gain
     """
-    """STUDENT CODE START"""
     K_t = np.matmul(sigma_bar_xzt, np.linalg.inv(S_t))
-    """STUDENT CODE END"""
 
     return K_t
 
@@ -398,101 +410,117 @@ def calc_meas_prediction(x_bar_t):
 
     return z_bar_t
 
-def meas_regroup(Z_bar_t,lmda):
-    """Calculate the Jacobian of motion model with respect to control input
+def meas_regroup(Z_bar_t):
+    """Regroup the measurement matrix using a weighted average
 
     Parameters:
-    x_t_prev (np.array)     -- the previous state estimate
-    u_t (np.array)          -- the current control input
+    Z_bar_t (np.array)     -- measurement matrix
 
     Returns:
-    G_u_t (np.array)        -- Jacobian of motion model wrt to u
+    z_bar_t (np.array)     -- weighted average of measurement matrix columns
     """
-
-    """STUDENT CODE START"""
     (n,m)= Z_bar_t.shape
+    #reshape Z_bar_t for matrix operations
+    Z_bar_t.shape = (n,1,m)
+    #initialize output array
     z_bar_t = np.zeros((n,1))
+    #calc weights
     weights = np.zeros(m)
     weights[0] = lmda/(n+lmda)
     weights[1:] = 1/(2*(n+lmda))
+
     for i in range(m):
-        z_bar_t = z_bar_t + weights[i]*Z_bar_t[:,i]
-        mean_bar_t[0] = wrap_to_pi(mean_bar_t[0])
-        mean_bar_t[1] = wrap_to_pi(mean_bar_t[1])
-        mean_bar_t[4] = wrap_to_pi(mean_bar_t[4])
-        mean_bar_t[6] = wrap_to_pi(mean_bar_t[6])
+        z_bar_t = z_bar_t + weights[i]*Z_bar_t[:,:,i]
+        z_bar_t[0] = wrap_to_pi(z_bar_t[0])
 
-    """STUDENT CODE END"""
-
+    #reshape to match expected output dimensions
+    Z_bar_t.shape = (n,m)
     return z_bar_t
 
-def meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t, lmda,alpha,beta):
-    """Calculate the Jacobian of your motion model with respect to state
+def meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t):
+    """Calculate measurement uncertainty to use in kalman gain
 
     Parameters:
-    x_t_prev (np.array) -- the previous state estimate
-    u_t (np.array)      -- the current control input
+    sigma_ponts_pred_final (np.array) -- predicted state matrix
+    Z_bar_t (np.array)                -- measurement matrix
+    z_bar_t (np.array)                -- grouped predicted measurement
+    mean_bar_t (np.array)             -- predicted state estimate
 
     Returns:
-    G_x_t (np.array)    -- Jacobian of motion model wrt to x
+    S_t (np.array)                    -- predicted emasurement uncertainty
+    sigma_bar_xzt (np.array)          -- cross covariance matrix
     """
-    """STUDENT CODE START"""
+    #get shape of each input matrix
     (n,m) = sigma_points_pred_final.shape
-    sigma_z_t = np.zeros((len(z_bar_t[:,0]),len(z_bar_t[:,0])))
-    sigma_bar_xzt = np.zeros((n,n))
-    S_t = np.zeros((n,n))
+    (nz,mz) = Z_bar_t.shape
+
+    #reshape so they have a single column for matrix operations
+    sigma_points_pred_final.shape = (n,1,m)
+    Z_bar_t.shape = (nz,1,mz)
+
+    #harcode sigma z
+    sigma_z_t = np.zeros((nz,nz))
+
+    #initialize output matrices
+    sigma_bar_xzt = np.zeros((n,nz))
+    S_t = np.zeros((nz,nz))
+
+    #calc weights
     weights = np.zeros(m)
     weights[0] = lmda/(n+lmda) + (1-alpha**2+beta)
     weights[1:] = 1/(2*(n+lmda))
-    for i in range(m):
-        squared_error = np.matmul((sigma_points_pred_final[:,i]-mean_bar_t),(Z_bar_t[:,i]-z_bar_t).T)
-        sigma_bar_xzt = np.add(sigma_bar_xzt,weights[i]*squared_error)
-        sigma_bar_xzt[0] = wrap_to_pi(sigma_bar_xzt[0])
-        sigma_bar_xzt[1] = wrap_to_pi(sigma_bar_xzt[1])
-        sigma_bar_xzt[4] = wrap_to_pi(sigma_bar_xzt[4])
-        sigma_bar_xzt[6] = wrap_to_pi(sigma_bar_xzt[6])
+
     
     for i in range(m):
-        squared_error = np.matmul((Z_bar_t[:,i]-z_bar_t),(Z_bar_t[:,i]-z_bar_t).T)
-        S_t = np.add(S_t,weights[i]*squared_error)
-        S_t[0] = wrap_to_pi(S_t[0])
-        S_t[1] = wrap_to_pi(S_t[1])
-        S_t[4] = wrap_to_pi(S_t[4])
-        S_t[6] = wrap_to_pi(S_t[6])
-    S_t = np.add(sigma_bar_xzt,sigma_z_t) #am unsure if this is summed every sigma point or not
+        #calc errors in measurement points and sigma points/wrap to pi
+        z_error = (Z_bar_t[:,:,i]-z_bar_t)
+        z_error[0,0] = wrap_to_pi(z_error[0,0])
+        sigma_points_error = (sigma_points_pred_final[:,:,i]-mean_bar_t)
+        sigma_points_error[0,0] = wrap_to_pi(sigma_points_error[0,0])
+        sigma_points_error[1,0] = wrap_to_pi(sigma_points_error[1,0])
+        sigma_points_error[4,0] = wrap_to_pi(sigma_points_error[4,0])
+        sigma_points_error[6,0] = wrap_to_pi(sigma_points_error[6,0])
+
+        #calc uncertainties
+        z_squared_error = np.matmul(sigma_points_error,z_error.T)
+        sigma_bar_xzt = np.add(sigma_bar_xzt,weights[i]*z_squared_error)
+        s_squared_error = np.matmul(z_error,z_error.T)
+        S_t = np.add(S_t,weights[i]*s_squared_error)
     
-    """STUDENT CODE END"""
+    S_t = np.add(S_t,sigma_z_t) #am unsure if this is summed every sigma point or not
+   
 
     return S_t, sigma_bar_xzt
 
 def correction_step(mean_bar_t, z_t, sigma_x_bar_t, sigma_points_pred_final):
-    """Compute the correction of EKF
+    """Compute the correction of UKF
 
     Parameters:
-    x_bar_t       (np.array)    -- the predicted state estimate of time t
-    z_t           (np.array)    -- the measured state of time t
-    sigma_x_bar_t (np.array)    -- the predicted variance of time t
+    mean_bar_t       (np.array)         -- the predicted state estimate of time t
+    z_t           (np.array)            -- the measured state of time t
+    sigma_x_bar_t (np.array)            -- the predicted variance of time t
+    sigma_points_pred_final (np.array)  -- predicted sigma points
 
     Returns:
-    x_est_t       (np.array)    -- the filtered state estimate of time t
-    sigma_x_est_t (np.array)    -- the filtered variance estimate of time t
+    mean_est_t       (np.array)         -- the filtered state estimate of time t
+    sigma_x_est_t (np.array)            -- the filtered variance estimate of time t
     """
 
-    """STUDENT CODE START"""
     Z_bar_t = calc_meas_sigma_points(sigma_points_pred_final)
-    z_bar_t = meas_regroup(Z_bar_t,lmda)
-    S_t,sigma_bar_xzt = meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t,lmda,alpha,beta)
+    z_bar_t = meas_regroup(Z_bar_t)
+    S_t,sigma_bar_xzt = meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t)
     K_t = calc_kalman_gain(sigma_bar_xzt,S_t)
-    mean_est_t = mean_bar_t + np.matmul(K_t,(z_t-z_bar_t))
-    sigma_x_est_t = sigma_x_bar_t - np.mult(K_t,np.matmul(S_t,K_t.T))
+    meas_diff = (z_t-z_bar_t)
+    meas_diff[0,0] = wrap_to_pi(meas_diff[0,0])
+    
+    mean_est_t = mean_bar_t + np.matmul(K_t,meas_diff)
+    sigma_x_est_t = sigma_x_bar_t - np.matmul(K_t,np.matmul(S_t,K_t.T))
 
-    """STUDENT CODE END"""
-
-    return [mean_est_t, sigma_x_est_t]
+    return mean_est_t, sigma_x_est_t
 
 
 def main():
-    """Run a EKF on logged data from IMU and LiDAR moving in a box formation around a landmark"""
+    """Run a UKF on logged data from sailboat data"""
 
     filepath = "./"
     filename = "2019Aug10_revised"
@@ -515,37 +543,28 @@ def main():
 
 
     #  Initialize filter
-    """STUDENT CODE START"""
     N = 8  # number of states
-    state_est_t_prev = np.array([u_roll[0],u_yaw[0],0,0,u_v_ang[0],u_v_mag[0],data_TWA[0],data_TWS[0]]) #initial state assum global (0,0) is at northwest corner
+    state_est_t_prev = np.array([[u_roll[0],u_yaw[0],0,0,u_v_ang[0],u_v_mag[0],data_TWA[0],data_TWS[0]]]).T #initial state assum global (0,0) is at northwest corner
     var_est_t_prev = np.identity(N)
 
-    state_estimates = np.zeros((N, len(time_stamps)))
+    state_estimates = np.zeros((N,1, len(time_stamps)))
     covariance_estimates = np.zeros((N, N, len(time_stamps)))
     gps_estimates = np.empty((2, len(time_stamps)))
-
-    state_estimates[:,-1] = state_est_t_prev
+    state_estimates[:,:,-1] = state_est_t_prev
     covariance_estimates[:,:,-1] = var_est_t_prev
-
-  
-    """STUDENT CODE END"""
 
     #  Run filter over data
     for t, _ in enumerate(time_stamps):
         # Get control input
-        """STUDENT CODE START"""
-        u_t = np.array([u_roll[t],u_yaw[t],u_v_ang[t],u_v_mag[t]])
-        state_est_t_prev = state_estimates[:,t-1]
+        u_t = np.array([[u_roll[t],u_yaw[t],u_v_ang[t],u_v_mag[t]]]).T
+        state_est_t_prev = state_estimates[:,:,t-1]
         var_est_t_prev = covariance_estimates[:,:,t-1]
-        """STUDENT CODE END"""
 
         # Prediction Step
         state_pred_t, var_pred_t, sigma_points_pred= prediction_step(state_est_t_prev,u_t,var_est_t_prev)
 
         # Get measurement
-        """STUDENT CODE START"""
-        z_t = np.array([z_AWA[t],z_AWS[t]]).T
-        """STUDENT CODE END"""
+        z_t = np.array([[z_AWA[t],z_AWS[t]]]).T
         #Correction Step
         state_est_t, var_est_t = correction_step(state_pred_t,z_t,var_pred_t,sigma_points_pred)
         
@@ -553,8 +572,7 @@ def main():
         var_est_t_prev = var_est_t
 
         # Log Data
-        state_est_t.shape = (N,)
-        state_estimates[:, t] = state_est_t
+        state_estimates[:,:, t] = state_est_t
         covariance_estimates[:, :, t] = var_est_t
 
         x_gps, y_gps = convert_gps_to_xy(lat_gps=lat_gps[t],
@@ -563,12 +581,9 @@ def main():
                                          lon_origin=lon_origin)
         gps_estimates[:, t] = np.array([x_gps, y_gps])
 
-    """STUDENT CODE START"""
-    #plotting yeahhhh
-
-   
-
-    """STUDENT CODE END"""
+    #plotting 
+    plt.plot(state_estimates[6,0,:])
+    plt.show()
     return 0
 
 
