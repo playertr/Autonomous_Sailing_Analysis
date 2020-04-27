@@ -54,17 +54,17 @@ STDDEV_INIT = 100 # in any dimension, the initial particle array with be randomi
 # Propagation variance  (1-second timestep)
 # 0.0872665 radians = 5 degrees
 # 0.261799 radians  = 15 degrees
-STDDEV_ROLL         = 0.261799
-STDDEV_YAW          = 0.261799
+STDDEV_ROLL         = 0.01
+STDDEV_YAW          = 0.0872665
 STDDEV_ROLL_DOT     = 0.01
 STDDEV_YAW_DOT      = 0.01
-STDDEV_V_ANG        = 0.261799
+STDDEV_V_ANG        = 0.0872665
 STDDEV_V_MAG        = 1
-STDDEV_TWA          = 0.261799
+STDDEV_TWA          = 0.0872665
 STDDEV_TWS          = 1
 
 # Measurement variance
-STDDEV_MEAS_AWA     = 0.0872665
+STDDEV_MEAS_AWA     = 0.01745 # 1 deg
 STDDEV_MEAS_AWS     = 1
 
 DELTA_T = 1.0275 # seconds
@@ -227,9 +227,9 @@ def propagate_state(x_t_prev, u_t):
     yaw         = u_yaw                                 + np.random.normal(0, STDDEV_YAW)
     roll_dot    = wrap_to_pi(roll - x_roll) / DELTA_T   + np.random.normal(0, STDDEV_ROLL_DOT)
     yaw_dot     = wrap_to_pi(yaw - x_yaw) / DELTA_T     + np.random.normal(0, STDDEV_YAW_DOT)
-    v_ang       = u_v_ang                               + np.random.normal(0, STDDEV_V_ANG)
+    v_ang       = wrap_to_pi(u_v_ang                    + np.random.normal(0, STDDEV_V_ANG))
     v_mag       = u_v_mag                               + np.random.normal(0, STDDEV_V_MAG)
-    TWA         = x_TWA                                 + np.random.normal(0, STDDEV_TWA)
+    TWA         = wrap_to_pi(x_TWA                      + np.random.normal(0, STDDEV_TWA))
     TWS         = x_TWS                                 + np.random.normal(0, STDDEV_TWS)
 
     x_bar_t = np.array([roll, yaw, roll_dot, yaw_dot, v_ang, v_mag, TWA, TWS])
@@ -237,7 +237,7 @@ def propagate_state(x_t_prev, u_t):
     return x_bar_t
 
 def prediction_step(P_t_prev, u_t):
-    """Compute the prediction of EKF
+    """Compute the prediction of PF
 
     Parameters:
     P_t_prev (np.array)         -- the previous state matrix, [[x, y, theta, w]^T [x, y, theta, w]^T ...]
@@ -272,7 +272,7 @@ def test_calc_meas_prediction():
 
     x_bar_t = [45 * np.pi/180, 0, 0, 0, 0, 3, 0, 1] # wind 1 m/s from the east, boat moving east, facing east, heeled
     answer = calc_meas_prediction(x_bar_t)
-    print("Expected answer: [pi/2,1]")
+    print("Expected answer: [pi/2,4]")
     print(answer)
 
     x_bar_t = [45 * np.pi/180, 0, 0, 0, 0, 0, np.pi/2, 1] # wind 1 m/s from the North, boat stopped and facing east, heeled
@@ -282,7 +282,12 @@ def test_calc_meas_prediction():
 
     x_bar_t = [45 * np.pi/180, 0, 0, 0, 0, 1, np.pi/2, 1] # wind 1 m/s from the North, boat moving and facing east, heeled
     answer = calc_meas_prediction(x_bar_t)
-    print("Expected answer: [fronter left,less than 1]")
+    print("Expected answer: [fronter left, more than 1]")
+    print(answer)
+
+    x_bar_t = [45 * np.pi/180, 0, -1, 0, 0, 0, np.pi/2, 0] # wind 0 m/s from the North, boat facing east, heeled, swinging up
+    answer = calc_meas_prediction(x_bar_t)
+    print("Expected answer: [pi/2, 66]")
     print(answer)
 
     # expect it to be (0, 1)
@@ -327,11 +332,11 @@ def calc_meas_prediction(x_bar_t):
     # reduce the starboard component by the cosine of the heel (roll) angle
     # to account for out-of-plane measurement of the wind vector
     # note: if we want to account for mast twist later, this is where we do it.
-    app_wind_right_of_vane  = app_wind_stb * np.cos(roll) + MAST_HEIGHT * roll_dot * MS_TO_KNOTS
+    app_wind_right_of_vane  = app_wind_stb * np.cos(roll) # + MAST_HEIGHT * roll_dot * MS_TO_KNOTS
     app_wind_fwd_of_vane    = app_wind_fwd
 
     # take the angle and magnitude of the relative wind vector in the vane frame
-    z_AWA = np.arctan2(app_wind_fwd_of_vane, app_wind_right_of_vane)
+    z_AWA = np.arctan2(app_wind_fwd_of_vane, app_wind_right_of_vane) # note: this is in [-pi, pi]
     z_AWS = np.linalg.norm([app_wind_right_of_vane, app_wind_fwd_of_vane])
 
     z_bar_t = np.array([z_AWA, z_AWS])
@@ -405,9 +410,36 @@ def correction_step(P_t_predict, z_t):
     state_est_t = calc_mean_state(P_t)
     return P_t, state_est_t
 
+def plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS):
+    plt.figure(1)
+    plt.plot(time_stamps, state_estimates[6,:])
+    plt.xlabel('Time (s)')
+    plt.ylabel('AWA (rad from starboard)')
+    plt.title('Estimated AWA vs Time')
+
+    plt.figure(2)
+    plt.plot(time_stamps, state_estimates[7,:])
+    plt.xlabel('Time (s)')
+    plt.ylabel('AWS kts')
+    plt.title('AWS vs Time')
+
+    plt.figure(3)
+    plt.plot(time_stamps, state_estimates[2,:])
+    plt.xlabel('Time (s)')
+    plt.ylabel('\dot{Roll} (rad/s)')
+    plt.title('Roll rate vs Time')
+
+    plt.figure(4)
+    plt.plot(time_stamps, z_AWA)
+    plt.xlabel('Time (s)')
+    plt.ylabel('AWA (rad from starboard)')
+    plt.title('Measured AWA vs Time')
+
+    plt.show()
+    pdb.set_trace()
 
 def main():
-    """Run a PF on logged data from IMU and LiDAR moving in a box formation around a landmark"""
+    """Run a PF on sailboat data"""
 
     filepath = "./"
     filename = "2019Aug10_revised"
@@ -423,9 +455,9 @@ def main():
     lon_gps = data["Lon"]
     u_roll  = [wrap_to_pi(x * np.pi/180) for x in data['Heel']]         # ref mast, to the right side of the boat
     u_yaw   = [wrap_to_pi(np.pi - x*np.pi/180) for x in data['HDG']]  # HDG is changed into ref E CCW, initially imported w ref N CW 
-    u_v_ang = [wrap_to_pi(np.pi- x*np.pi/180) for x in data["COG"]]   # COG is changed into ref E CCW, initially imported w ref N CW
+    u_v_ang = [wrap_to_pi(np.pi - x*np.pi/180) for x in data["COG"]]   # COG is changed into ref E CCW, initially imported w ref N CW
     u_v_mag = data["SOG"]          
-    z_AWA = [wrap_to_pi(np.pi - x*np.pi/180) for x in data["AWA"]]    # AWA is changed into ref E CCW, initially imported w ref N CW
+    z_AWA = [wrap_to_pi(np.pi/2 - x*np.pi/180) for x in data["AWA"]]    # AWA is changed into ref starboard CCW, initially imported w ref forward CW
     z_AWS = data["AWS"]
     data_TWA = [wrap_to_pi(np.pi - x*np.pi/180) for x in data["TWA"]] # TWA is changed into ref E CCW, initially imported w ref N CW
     data_TWS = data["TWS"]
@@ -453,6 +485,9 @@ def main():
     for t, _ in enumerate(time_stamps):
         # Get control input
         u_t = np.array([u_roll[t], u_yaw[t], u_v_ang[t], u_v_mag[t]])
+
+        # if t == 200:
+        #     pdb.set_trace()
 
         # Prediction Step
         P_t_predict = prediction_step(P_t_prev, u_t)
@@ -515,10 +550,10 @@ def main():
         # print(t)
         # plt.pause(0.0001)
 
+    plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS)
     pdb.set_trace()
     print(RMSE[-1])
 
-    plt.show()
     return 0
 
 
