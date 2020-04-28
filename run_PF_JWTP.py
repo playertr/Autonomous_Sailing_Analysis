@@ -30,7 +30,7 @@ Description:
                    Sea people? I hardly sea any people at all during the quarantine! -Tim
                    Quarantine? More like brigantine! -Alex
 """
-
+from __future__ import print_function
 import csv
 import time
 import sys
@@ -39,8 +39,10 @@ import numpy as np
 import math
 import os.path
 import pdb
+import sciplot
 from scipy.stats import norm
 import scipy
+
 
 NUM_PARTICLES   = 500 # reducing this makes it faster, but it may not converge.
 MAST_HEIGHT     = 33 # meters
@@ -567,6 +569,6 @@ def main():
 
     return 0
 
-
 if __name__ == "__main__":
+    print = sciplot.print_wrapper(print)
     main()

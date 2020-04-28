@@ -30,7 +30,7 @@ Description:
                    Sea people? I hardly sea any people at all during the quarantine! -Tim
                    Quarantine? More like brigantine! -Alex
 """
-
+from __future__ import print_function
 import csv
 import time
 import sys
@@ -39,6 +39,7 @@ import numpy as np
 import math
 import os.path
 from scipy import integrate
+import sciplot
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
@@ -668,4 +669,5 @@ def main():
 
 
 if __name__ == "__main__":
+    print = sciplot.print_wrapper(print)
     main()
