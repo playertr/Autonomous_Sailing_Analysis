@@ -1,10 +1,15 @@
 """
-Decoy module to add pictures of sailboats to all print statements.
-Also requires __future__ library.
+Decoy library to override printing functions with pictures of sailboats.
 
 Love,
 Tim
 """
+
+from __future__ import print_function
+# This must be the first statement before other statements.
+# You may only put a quoted or triple quoted string, 
+# Python comments, other future statements, or blank lines before the __future__ line.
+
 def print_wrapper(func):
     """My custom print() function."""
     # Adding new arguments to the print function signature 
@@ -30,5 +35,3 @@ def print_wrapper(func):
         return func(*args, **kwargs)
     return wrapper
 
-print = print_wrapper(print)
-print("cat")
