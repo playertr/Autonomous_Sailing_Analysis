@@ -43,11 +43,8 @@ import sciplot
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 
-HEIGHT_THRESHOLD = 0.0  # meters
-GROUND_HEIGHT_THRESHOLD = -.4  # meters
-DT = 0.1
-X_LANDMARK = 5.  # meters
-Y_LANDMARK = -5.  # meters
+
+DT = 1.03
 EARTH_RADIUS = 6.3781E6  # meters
 MAST_HEIGHT = 10
 MS_TO_KNOTS = 1 #get correct value for this
@@ -529,6 +526,7 @@ def meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t):
 
     #harcode sigma z
     sigma_z_t = np.identity(nz)
+    #sigma_z_t = np.zeros((nz,nz))
 
     #initialize output matrices
     sigma_bar_xzt = np.zeros((n,nz))
@@ -591,6 +589,45 @@ def correction_step(mean_bar_t, z_t, sigma_x_bar_t, sigma_points_pred_final):
 
     return mean_est_t, sigma_x_est_t
 
+def plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS, data_TWA, data_TWS):
+    plt.figure(1)
+    plt.plot(time_stamps, state_estimates[6,:])
+    plt.xlabel('Time (s)')
+    plt.ylabel('TWA (rad from east)')
+    plt.title('Estimated TWA vs Time')
+
+    plt.figure(2)
+    plt.plot(time_stamps, state_estimates[7,:])
+    plt.xlabel('Time (s)')
+    plt.ylabel('TWS kts')
+    plt.title('Estimated TWS vs Time')
+
+    plt.figure(3)
+    plt.plot(time_stamps, state_estimates[2,:])
+    plt.xlabel('Time (s)')
+    plt.ylabel('\dot{Roll} (rad/s)')
+    plt.title('Roll rate vs Time')
+
+    plt.figure(4)
+    plt.plot(time_stamps, z_AWA)
+    plt.xlabel('Time (s)')
+    plt.ylabel('AWA (rad from starboard)')
+    plt.title('Measured AWA vs Time')
+
+    plt.figure(5)
+    plt.plot(time_stamps, data_TWA)
+    plt.xlabel('Time (s)')
+    plt.ylabel('TWA (rad from east)')
+    plt.title('Professional TWA vs Time')
+
+    plt.figure(6)
+    plt.plot(time_stamps, data_TWS)
+    plt.xlabel('Time (s)')
+    plt.ylabel('TWS (kts)')
+    plt.title('Professional TWS vs Time')
+
+    plt.show()
+
 
 def main():
     """Run a UKF on logged data from a
@@ -622,12 +659,12 @@ def main():
     lat_gps = data["Lat"]
     lon_gps = data["Lon"]
     u_roll  = [wrap_to_pi(x * np.pi/180) for x in data['Heel']]         # ref mast, to the right side of the boat
-    u_yaw   = [wrap_to_pi(np.pi - x*np.pi/180) for x in data['HDG']]  # HDG is changed into ref E CCW, initially imported w ref N CW 
-    u_v_ang = [wrap_to_pi(np.pi- x*np.pi/180) for x in data["COG"]]   # COG is changed into ref E CCW, initially imported w ref N CW
+    u_yaw   = [wrap_to_pi(np.pi/2 - x*np.pi/180) for x in data['HDG']]  # HDG is changed into ref E CCW, initially imported w ref N CW 
+    u_v_ang = [wrap_to_pi(np.pi/2 - x*np.pi/180) for x in data["COG"]]   # COG is changed into ref E CCW, initially imported w ref N CW
     u_v_mag = data["SOG"]          
     z_AWA = [wrap_to_pi((np.pi/2) - x*np.pi/180) for x in data["AWA"]]    # AWA is changed into ref E CCW, initially imported w ref N CW
     z_AWS = data["AWS"]
-    data_TWA = [wrap_to_pi(np.pi - x*np.pi/180) for x in data["TWA"]] # TWA is changed into ref E CCW, initially imported w ref N CW
+    data_TWA = [wrap_to_pi(np.pi/2 - x*np.pi/180) for x in data["TWA"]] # TWA is changed into ref E CCW, initially imported w ref N CW
     data_TWS = data["TWS"]
     lat_origin = lat_gps[0]
     lon_origin = lon_gps[0]
@@ -672,10 +709,12 @@ def main():
                                          lat_origin=lat_origin,
                                          lon_origin=lon_origin)
         gps_estimates[:, t] = np.array([x_gps, y_gps])
-
-    #plotting 
-    plt.plot(state_estimates[6,0,:])
-    plt.show()
+    print('stateshape', state_estimates.shape)
+    state_estimates.shape = (N,len(time_stamps))
+    #plotting
+    plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS, data_TWA, data_TWS)
+    # plt.plot(state_estimates[6,0,:])
+    # plt.show()
     return 0
 
 
