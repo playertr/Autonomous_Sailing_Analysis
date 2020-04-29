@@ -241,7 +241,7 @@ def motion_uncertainty(sigma_points_pred,mean_bar_t):
     #shape array for matrix operations
     sigma_points_pred.shape = (n,1,m)
     #motion model noise
-    R_t = np.identity(n) #update with correct value
+    R_t = 0.000001*np.identity(n) #update with correct value
     #initialize output array
     sigma_x_bar_t = np.zeros((n,n))
     #calculate weights
@@ -525,7 +525,7 @@ def meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t):
     Z_bar_t.shape = (nz,1,mz)
 
     #harcode sigma z
-    sigma_z_t = np.identity(nz)
+    sigma_z_t = 0.0000001*np.identity(nz)
     #sigma_z_t = np.zeros((nz,nz))
 
     #initialize output matrices
@@ -664,7 +664,7 @@ def main():
     u_v_mag = data["SOG"]          
     z_AWA = [wrap_to_pi((np.pi/2) - x*np.pi/180) for x in data["AWA"]]    # AWA is changed into ref E CCW, initially imported w ref N CW
     z_AWS = data["AWS"]
-    data_TWA = [wrap_to_pi(np.pi/2 - x*np.pi/180) for x in data["TWA"]] # TWA is changed into ref E CCW, initially imported w ref N CW
+    data_TWA = [wrap_to_pi(np.pi/2 - x*np.pi/180) for x in data["TWD"]] # TWA is changed into ref E CCW, initially imported w ref N CW
     data_TWS = data["TWS"]
     lat_origin = lat_gps[0]
     lon_origin = lon_gps[0]
@@ -678,15 +678,13 @@ def main():
     state_estimates = np.zeros((N,1, len(time_stamps)))
     covariance_estimates = np.zeros((N, N, len(time_stamps)))
     gps_estimates = np.empty((2, len(time_stamps)))
-    state_estimates[:,:,-1] = state_est_t_prev
-    covariance_estimates[:,:,-1] = var_est_t_prev
+    state_estimates[:,:,0] = state_est_t_prev
+    covariance_estimates[:,:,0] = var_est_t_prev
 
     #  Run filter over data
     for t, _ in enumerate(time_stamps):
         # Get control input
         u_t = np.array([[u_roll[t],u_yaw[t],u_v_ang[t],u_v_mag[t]]]).T
-        state_est_t_prev = state_estimates[:,:,t-1]
-        var_est_t_prev = covariance_estimates[:,:,t-1]
 
         # Prediction Step
         state_pred_t, var_pred_t, sigma_points_pred= prediction_step(state_est_t_prev,u_t,var_est_t_prev)
