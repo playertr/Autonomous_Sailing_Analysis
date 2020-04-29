@@ -30,7 +30,7 @@ Description:
                    Sea people? I hardly sea any people at all during the quarantine! -Tim
                    Quarantine? More like brigantine! -Alex
 """
-from __future__ import print_function
+
 import csv
 import time
 import sys
@@ -39,34 +39,33 @@ import numpy as np
 import math
 import os.path
 import pdb
-import sciplot
 from scipy.stats import norm
 import scipy
 
-
-NUM_PARTICLES   = 500 # reducing this makes it faster, but it may not converge.
+NUM_PARTICLES   = 1000
 MAST_HEIGHT     = 33 # meters
 MS_TO_KNOTS     = 1.944 # knots per m/s
 
+
 STDDEV_DISTANCE = 0.1 # meters
 
-STDDEV_INIT = 20 # in any dimension, the initial particle array with be randomized with this.
+STDDEV_INIT = 100 # in any dimension, the initial particle array with be randomized with this.
 
 # Propagation variance  (1-second timestep)
 # 0.0872665 radians = 5 degrees
 # 0.261799 radians  = 15 degrees
-STDDEV_ROLL         = 0.01
-STDDEV_YAW          = 0.0872665
+STDDEV_ROLL         = 0.261799
+STDDEV_YAW          = 0.261799
 STDDEV_ROLL_DOT     = 0.01
 STDDEV_YAW_DOT      = 0.01
-STDDEV_V_ANG        = 0.0872665
+STDDEV_V_ANG        = 0.261799
 STDDEV_V_MAG        = 1
-STDDEV_TWA          = 2 * 0.01745
-STDDEV_TWS          = 0.5
+STDDEV_TWA          = 0.261799
+STDDEV_TWS          = 1
 
 # Measurement variance
 STDDEV_MEAS_AWA     = 0.01745 # 1 deg
-STDDEV_MEAS_AWS     = 0.5
+STDDEV_MEAS_AWS     = 1
 
 DELTA_T = 1.0275 # seconds
 
@@ -288,7 +287,7 @@ def test_calc_meas_prediction():
 
     x_bar_t = [45 * np.pi/180, 0, -1, 0, 0, 0, np.pi/2, 0] # wind 0 m/s from the North, boat facing east, heeled, swinging up
     answer = calc_meas_prediction(x_bar_t)
-    print("Expected answer: [pi/2, 66]")
+    print("Expected answer: [fronter left, more than 1]")
     print(answer)
 
     # expect it to be (0, 1)
@@ -333,7 +332,7 @@ def calc_meas_prediction(x_bar_t):
     # reduce the starboard component by the cosine of the heel (roll) angle
     # to account for out-of-plane measurement of the wind vector
     # note: if we want to account for mast twist later, this is where we do it.
-    app_wind_right_of_vane  = app_wind_stb * np.cos(roll) + MAST_HEIGHT * roll_dot * MS_TO_KNOTS
+    app_wind_right_of_vane  = app_wind_stb * np.cos(roll) # + MAST_HEIGHT * roll_dot * MS_TO_KNOTS
     app_wind_fwd_of_vane    = app_wind_fwd
 
     # take the angle and magnitude of the relative wind vector in the vane frame
@@ -411,44 +410,6 @@ def correction_step(P_t_predict, z_t):
     state_est_t = calc_mean_state(P_t)
     return P_t, state_est_t
 
-def plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS, data_TWA, data_TWS):
-    plt.figure(1)
-    plt.plot(time_stamps, state_estimates[6,:])
-    plt.xlabel('Time (s)')
-    plt.ylabel('TWA (rad from east)')
-    plt.title('Estimated TWA vs Time')
-
-    plt.figure(2)
-    plt.plot(time_stamps, state_estimates[7,:])
-    plt.xlabel('Time (s)')
-    plt.ylabel('TWS kts')
-    plt.title('Estimated TWS vs Time')
-
-    plt.figure(3)
-    plt.plot(time_stamps, state_estimates[2,:])
-    plt.xlabel('Time (s)')
-    plt.ylabel('\dot{Roll} (rad/s)')
-    plt.title('Roll rate vs Time')
-
-    plt.figure(4)
-    plt.plot(time_stamps, z_AWA)
-    plt.xlabel('Time (s)')
-    plt.ylabel('AWA (rad from starboard)')
-    plt.title('Measured AWA vs Time')
-
-    plt.figure(5)
-    plt.plot(time_stamps, data_TWA)
-    plt.xlabel('Time (s)')
-    plt.ylabel('TWA (rad from east)')
-    plt.title('Professional TWA vs Time')
-
-    plt.figure(6)
-    plt.plot(time_stamps, data_TWS)
-    plt.xlabel('Time (s)')
-    plt.ylabel('TWS (kts)')
-    plt.title('Professional TWS vs Time')
-
-    plt.show()
 
 def main():
     """Run a PF on sailboat data"""
@@ -466,19 +427,20 @@ def main():
     lat_gps = data["Lat"]
     lon_gps = data["Lon"]
     u_roll  = [wrap_to_pi(x * np.pi/180) for x in data['Heel']]         # ref mast, to the right side of the boat
-    u_yaw   = [wrap_to_pi(np.pi/2 - x*np.pi/180) for x in data['HDG']]  # HDG is changed into ref E CCW, initially imported w ref N CW 
-    u_v_ang = [wrap_to_pi(np.pi/2 - x*np.pi/180) for x in data["COG"]]  # COG is changed into ref E CCW, initially imported w ref N CW
-    u_v_mag = data["SOG"]          
-    z_AWA = [wrap_to_pi(np.pi/2 - x*np.pi/180) for x in data["AWA"]]    # AWA is changed into ref starboard CCW, initially imported w ref forward CW
+    u_yaw   = [wrap_to_pi(np.pi - x*np.pi/180) for x in data['HDG']]  # HDG is changed into ref E CCW, initially imported w ref N CW 
+    u_v_ang = [wrap_to_pi(np.pi - x*np.pi/180) for x in data["COG"]]   # COG is changed into ref E CCW, initially imported w ref N CW
+    u_v_mag = data["SOG"]
+    u_roll_dot = np.diff(roll)          
+    z_AWA = [wrap_to_pi(np.pi - x*np.pi/180) for x in data["AWA"]]    # AWA is changed into ref starboard CCW, initially imported w ref forward CW
     z_AWS = data["AWS"]
-    data_TWA = [wrap_to_pi(np.pi/2 - x*np.pi/180) for x in data["TWD"]] # TWA is changed into ref E CCW, initially imported w ref N CW
+    data_TWA = [wrap_to_pi(np.pi - x*np.pi/180) for x in data["TWA"]] # TWA is changed into ref E CCW, initially imported w ref N CW
     data_TWS = data["TWS"]
     lat_origin = lat_gps[0]
     lon_origin = lon_gps[0]
 
 
     #  Initialize filter
-    N = 8  # number of states
+    N = 2  # number of states
 
     # Randomly generate initial particles from a normal distribution centered around (at 0,0,0)
     # Use small STDDEV_INIT for known start position 
@@ -495,12 +457,11 @@ def main():
 
     #  Run filter over data
     for t, _ in enumerate(time_stamps):
-        print(t)
         # Get control input
         u_t = np.array([u_roll[t], u_yaw[t], u_v_ang[t], u_v_mag[t]])
 
-        # if t == 200:
-        #     pdb.set_trace()
+        if t == 200:
+            pdb.set_trace()
 
         # Prediction Step
         P_t_predict = prediction_step(P_t_prev, u_t)
@@ -563,12 +524,37 @@ def main():
         # print(t)
         # plt.pause(0.0001)
 
-    plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS, data_TWA, data_TWS)
+    pdb.set_trace()
+    plt.figure(1)
+    plt.plot(time_stamps, state_estimates[6,:])
+    plt.xlabel('Time (s)')
+    plt.ylabel('AWA (rad from starboard)')
+    plt.title('Estimated AWA vs Time')
+
+    plt.figure(2)
+    plt.plot(time_stamps, state_estimates[7,:])
+    plt.xlabel('Time (s)')
+    plt.ylabel('AWS kts')
+    plt.title('AWS vs Time')
+
+    plt.figure(3)
+    plt.plot(time_stamps, state_estimates[2,:])
+    plt.xlabel('Time (s)')
+    plt.ylabel('\dot{Roll} (rad/s)')
+    plt.title('Roll rate vs Time')
+
+    plt.figure(4)
+    plt.plot(time_stamps, z_AWA)
+    plt.xlabel('Time (s)')
+    plt.ylabel('AWA (rad from starboard)')
+    plt.title('Measured AWA vs Time')
+
+    plt.show()
     pdb.set_trace()
     print(RMSE[-1])
 
     return 0
 
+
 if __name__ == "__main__":
-    print = sciplot.print_wrapper(print)
     main()
