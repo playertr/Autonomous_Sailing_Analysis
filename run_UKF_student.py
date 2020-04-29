@@ -294,8 +294,14 @@ def calc_sigma_points(mean_t_prev, sigma_t_prev, lmda):
     #how dow we deal with negative covariances in sqrt?
     sigma_points = np.zeros((n,2*n +1))
     sigma_points[:,0] =mean_t_prev[:,0]
-    sigma_points[:,1:n+1] = mean_t_prev + np.sqrt((n+lmda)*sigma_t_prev)[0:n] #do we need to wrap sigma values?
-    sigma_points[:,n+1:] = mean_t_prev + np.sqrt((n+lmda)*sigma_t_prev)[0:n]
+    sigma_points[:,1:n+1] = mean_t_prev + np.linalg.cholesky((n+lmda)*sigma_t_prev)[:,0:n] #do we need to wrap sigma values?
+    sigma_points[:,n+1:] = mean_t_prev + np.linalg.cholesky((n+lmda)*sigma_t_prev)[:,0:n]
+    sigma_points[0,1:] = [wrap_to_pi(x) for x in sigma_points[0,1:]]
+    sigma_points[1,1:] = [wrap_to_pi(x) for x in sigma_points[1,1:]]
+    sigma_points[4,1:] = [wrap_to_pi(x) for x in sigma_points[4,1:]]
+    sigma_points[6,1:] = [wrap_to_pi(x) for x in sigma_points[6,1:]]
+
+    print('big guy', sigma_points[:,0])
     return sigma_points
 
 
@@ -459,7 +465,7 @@ def meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t):
     Z_bar_t.shape = (nz,1,mz)
 
     #harcode sigma z
-    sigma_z_t = np.zeros((nz,nz))
+    sigma_z_t = np.identity(nz)
 
     #initialize output matrices
     sigma_bar_xzt = np.zeros((n,nz))
@@ -483,7 +489,7 @@ def meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t):
 
         #calc uncertainties
         z_squared_error = np.matmul(sigma_points_error,z_error.T)
-        sigma_bar_xzt = np.add(sigma_bar_xzt,weights[i]*z_squared_error)
+        sigma_bar_xzt = np.add(sigma_bar_xzt,weights[i]*z_squared_error) #pretty sure dont need wrap to pi but will revisit later
         s_squared_error = np.matmul(z_error,z_error.T)
         S_t = np.add(S_t,weights[i]*s_squared_error)
     
@@ -514,6 +520,10 @@ def correction_step(mean_bar_t, z_t, sigma_x_bar_t, sigma_points_pred_final):
     meas_diff[0,0] = wrap_to_pi(meas_diff[0,0])
     
     mean_est_t = mean_bar_t + np.matmul(K_t,meas_diff)
+    mean_est_t[0,0] = wrap_to_pi(mean_est_t[0,0])
+    mean_est_t[1,0] = wrap_to_pi(mean_est_t[1,0])
+    mean_est_t[4,0] = wrap_to_pi(mean_est_t[4,0])
+    mean_est_t[6,0] = wrap_to_pi(mean_est_t[6,0])
     sigma_x_est_t = sigma_x_bar_t - np.matmul(K_t,np.matmul(S_t,K_t.T))
 
     return mean_est_t, sigma_x_est_t
@@ -534,7 +544,7 @@ def main():
     u_yaw   = [wrap_to_pi(np.pi - x*np.pi/180) for x in data['HDG']]  # HDG is changed into ref E CCW, initially imported w ref N CW 
     u_v_ang = [wrap_to_pi(np.pi- x*np.pi/180) for x in data["COG"]]   # COG is changed into ref E CCW, initially imported w ref N CW
     u_v_mag = data["SOG"]          
-    z_AWA = [wrap_to_pi(np.pi - x*np.pi/180) for x in data["AWA"]]    # AWA is changed into ref E CCW, initially imported w ref N CW
+    z_AWA = [wrap_to_pi((np.pi/2) - x*np.pi/180) for x in data["AWA"]]    # AWA is changed into ref E CCW, initially imported w ref N CW
     z_AWS = data["AWS"]
     data_TWA = [wrap_to_pi(np.pi - x*np.pi/180) for x in data["TWA"]] # TWA is changed into ref E CCW, initially imported w ref N CW
     data_TWS = data["TWS"]
@@ -562,6 +572,7 @@ def main():
 
         # Prediction Step
         state_pred_t, var_pred_t, sigma_points_pred= prediction_step(state_est_t_prev,u_t,var_est_t_prev)
+        print('cat')
 
         # Get measurement
         z_t = np.array([[z_AWA[t],z_AWS[t]]]).T
