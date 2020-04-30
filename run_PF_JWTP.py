@@ -61,7 +61,7 @@ STDDEV_ROLL_DOT     = 0.01
 STDDEV_YAW_DOT      = 0.01
 STDDEV_V_ANG        = 0.0872665
 STDDEV_V_MAG        = 1
-STDDEV_TWA          = 2 * 0.01745
+STDDEV_TWD          = 2 * 0.01745
 STDDEV_TWS          = 0.5
 
 # Measurement variance
@@ -210,7 +210,7 @@ def propagate_state(x_t_prev, u_t):
 
     Returns:
     x_bar_t (np.array)   -- the predicted state
-    state vector is (roll, yaw, rolldot, yawdot, v_ang, v_mag, twa, tws)^T
+    state vector is (roll, yaw, rolldot, yawdot, v_ang, v_mag, twd, tws)^T
 
     u_t  (float)         -- the control input 
     control vector is (roll_meas, yaw_meas, v_ang_meas, v_mag_meas)
@@ -221,7 +221,7 @@ def propagate_state(x_t_prev, u_t):
     x_yaw       = x_t_prev[1]
     u_v_ang     = u_t[2]
     u_v_mag     = u_t[3]
-    x_TWA       = x_t_prev[6]
+    x_TWD       = x_t_prev[6]
     x_TWS       = x_t_prev[7]
 
     roll        = u_roll                                + np.random.normal(0, STDDEV_ROLL)
@@ -230,10 +230,10 @@ def propagate_state(x_t_prev, u_t):
     yaw_dot     = wrap_to_pi(yaw - x_yaw) / DELTA_T     + np.random.normal(0, STDDEV_YAW_DOT)
     v_ang       = wrap_to_pi(u_v_ang                    + np.random.normal(0, STDDEV_V_ANG))
     v_mag       = u_v_mag                               + np.random.normal(0, STDDEV_V_MAG)
-    TWA         = wrap_to_pi(x_TWA                      + np.random.normal(0, STDDEV_TWA))
+    TWD         = wrap_to_pi(x_TWD                      + np.random.normal(0, STDDEV_TWD))
     TWS         = x_TWS                                 + np.random.normal(0, STDDEV_TWS)
 
-    x_bar_t = np.array([roll, yaw, roll_dot, yaw_dot, v_ang, v_mag, TWA, TWS])
+    x_bar_t = np.array([roll, yaw, roll_dot, yaw_dot, v_ang, v_mag, TWD, TWS])
 
     return x_bar_t
 
@@ -252,7 +252,7 @@ def prediction_step(P_t_prev, u_t):
     P_t_predict = np.zeros(shape=P_t_prev.shape)
 
     # every column of the particle set is a particle: a guess of 
-    # (roll, yaw, rolldot, yawdat, v_ang, v_mag, twa, tws)^T
+    # (roll, yaw, rolldot, yawdat, v_ang, v_mag, twd, tws)^T
 
     for i in range(NUM_PARTICLES):
         P_t_predict[:-1,i] = propagate_state(P_t_prev[:-1,i], u_t) #at this point the weight stays zero
@@ -260,7 +260,7 @@ def prediction_step(P_t_prev, u_t):
     return P_t_predict  
 
 def test_calc_meas_prediction():
-    # roll, yaw, rolldot, yawdot, v_ang, v_mag, TWA, TWS
+    # roll, yaw, rolldot, yawdot, v_ang, v_mag, TWD, TWS
     x_bar_t = [0, 0, 0, 0, 0, 0, 0, 1] # wind 1 m/s from the east, boat holding still, facing east
     answer = calc_meas_prediction(x_bar_t)
     print("Expected answer: [pi/2,1]")
@@ -310,12 +310,12 @@ def calc_meas_prediction(x_bar_t):
     yaw_dot   = x_bar_t[3]
     v_ang     = x_bar_t[4]
     v_mag     = x_bar_t[5]
-    TWA       = x_bar_t[6]
+    TWD       = x_bar_t[6]
     TWS       = x_bar_t[7]
 
     # convert true wind from polar coordinates to cartesian
-    TWS_x_comp = TWS * np.cos(TWA) # TW East
-    TWS_y_comp = TWS * np.sin(TWA) # TW North
+    TWS_x_comp = TWS * np.cos(TWD) # TW East
+    TWS_y_comp = TWS * np.sin(TWD) # TW North
 
     # convert v_boat into cartesian coordinates 
     # note: this is where the wind is coming from
@@ -361,11 +361,11 @@ def calc_mean_state(P_t):
     yaw_dot_mean    = np.average(P_t[3,:], weights=P_t[-1,:])
     v_ang_mean      = np.average(P_t[4,:], weights=P_t[-1,:])
     v_mag_dot_mean  = np.average(P_t[5,:], weights=P_t[-1,:])
-    TWA_mean        = np.average(P_t[6,:], weights=P_t[-1,:])
+    TWD_mean        = np.average(P_t[6,:], weights=P_t[-1,:])
     TWS_mean        = np.average(P_t[7,:], weights=P_t[-1,:])
 
 
-    state_est_t = np.array([roll_mean, yaw_mean, roll_dot_mean, yaw_dot_mean, v_ang_mean, v_mag_dot_mean, TWA_mean, TWS_mean])
+    state_est_t = np.array([roll_mean, yaw_mean, roll_dot_mean, yaw_dot_mean, v_ang_mean, v_mag_dot_mean, TWD_mean, TWS_mean])
 
     return state_est_t
 
@@ -411,12 +411,12 @@ def correction_step(P_t_predict, z_t):
     state_est_t = calc_mean_state(P_t)
     return P_t, state_est_t
 
-def plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS, data_TWA, data_TWS):
+def plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS, data_TWD, data_TWS):
     plt.figure(1)
     plt.plot(time_stamps, state_estimates[6,:])
     plt.xlabel('Time (s)')
-    plt.ylabel('TWA (rad from east)')
-    plt.title('Estimated TWA vs Time')
+    plt.ylabel('TWD (rad from east)')
+    plt.title('Estimated TWD vs Time')
 
     plt.figure(2)
     plt.plot(time_stamps, state_estimates[7,:])
@@ -437,10 +437,10 @@ def plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS, data_TWA, data_TWS):
     plt.title('Measured AWA vs Time')
 
     plt.figure(5)
-    plt.plot(time_stamps, data_TWA)
+    plt.plot(time_stamps, data_TWD)
     plt.xlabel('Time (s)')
-    plt.ylabel('TWA (rad from east)')
-    plt.title('Professional TWA vs Time')
+    plt.ylabel('TWD (rad from east)')
+    plt.title('Professional TWD vs Time')
 
     plt.figure(6)
     plt.plot(time_stamps, data_TWS)
@@ -458,8 +458,8 @@ def main():
     data = load_data(filepath + filename)
     
     # remove all nan values
-    for key in data.keys():
-        data[key] = map(lambda x: 0 if np.isnan(x) else x, data[key])
+    #for key in data.keys():
+    #    data[key] = map(lambda x: 0 if np.isnan(x) else x, data[key])
 
     # Load data into variables
     time_stamps = data["Timestamp"]
@@ -471,7 +471,7 @@ def main():
     u_v_mag = data["SOG"]          
     z_AWA = [wrap_to_pi(np.pi/2 - x*np.pi/180) for x in data["AWA"]]    # AWA is changed into ref starboard CCW, initially imported w ref forward CW
     z_AWS = data["AWS"]
-    data_TWA = [wrap_to_pi(np.pi/2 - x*np.pi/180) for x in data["TWD"]] # TWA is changed into ref E CCW, initially imported w ref N CW
+    data_TWD = [wrap_to_pi(np.pi/2 - x*np.pi/180) for x in data["TWD"]] # TWD is changed into ref E CCW, initially imported w ref N CW
     data_TWS = data["TWS"]
     lat_origin = lat_gps[0]
     lon_origin = lon_gps[0]
@@ -484,13 +484,16 @@ def main():
     # Use small STDDEV_INIT for known start position 
     # Use large STDDEV_INIT for random start position
     P_t_prev = np.random.normal(25,STDDEV_INIT, size=(N+1,NUM_PARTICLES))
+    known_initial = np.array([[u_roll[0],u_yaw[0],0,0,u_v_ang[0],u_v_mag[0],data_TWD[0],data_TWS[0]]]) #initial state assum global (0,0) is at northwest corner
+    for i in range(1,NUM_PARTICLES):
+        P_t_prev[:-1,i] = known_initial
     P_t_prev[-1, :] = 1.0 / NUM_PARTICLES # assign equal weights to all particles
 
 
     state_estimates = np.empty((N, len(time_stamps)))
     gps_estimates = np.empty((2, len(time_stamps)))
     errorsq = np.empty(len(time_stamps))
-    RMSE_TWA = np.empty(len(time_stamps))
+    RMSE_TWD = np.empty(len(time_stamps))
     RMSE_TWs = np.empty(len(time_stamps))
 
     #  Run filter over data
@@ -524,9 +527,9 @@ def main():
         gps_estimates[:, t] = np.array([x_gps, y_gps])
 
         # RMSE
-        # errorsq_TWA[t] = (data_TWA - state_est_t[6])**2
+        # errorsq_TWD[t] = (data_TWD - state_est_t[6])**2
         # errorsq_TWS[t] = (data_TWS - state_est_t[7])**2
-        # RMSE_TWA[t] = np.sqrt(np.sum(errorsq_TWA[0:t]/t))
+        # RMSE_TWD[t] = np.sqrt(np.sum(errorsq_TWD[0:t]/t))
         # RMSE_TWS[t] = np.sqrt(np.sum(errorsq_TWS[0:t]/t))
 
         # # Plot Results
@@ -563,7 +566,7 @@ def main():
         # print(t)
         # plt.pause(0.0001)
 
-    plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS, data_TWA, data_TWS)
+    plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS, data_TWD, data_TWS)
     pdb.set_trace()
     print(RMSE[-1])
 
