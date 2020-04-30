@@ -42,6 +42,7 @@ from scipy import integrate
 import sciplot
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import pdb
 
 
 DT = 1.03
@@ -668,7 +669,7 @@ def main():
     data_TWS = data["TWS"]
     lat_origin = lat_gps[0]
     lon_origin = lon_gps[0]
-
+    pdb.set_trace()
 
     #  Initialize filter
     N = 8  # number of states
