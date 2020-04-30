@@ -32,7 +32,7 @@ x   \ `---( O )( O )( O )( O )( O )-' /
 x    `.    `-'  `-'  `-'  `-'  `-'  .' CJ   
 x~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  '''
         freq = 30
-        mesg = ''.join([' ' * (count/freq) if c == 'x' else c for c in secret_message])
+        mesg = ''.join([' ' * count if c == 'x' else c for c in secret_message])
 
         global count
         count += 1
