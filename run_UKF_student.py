@@ -49,9 +49,9 @@ DT = 1.03
 EARTH_RADIUS = 6.3781E6  # meters
 MAST_HEIGHT = 10
 MS_TO_KNOTS = 1 #get correct value for this
-lmda = 1.0 #parameters to stretch or condense sigma points
+lmda = 0.3 #parameters to stretch or condense sigma points
 alpha = 0.5
-beta = 2.0
+beta = 2
 
 
 def load_data(filename):
@@ -242,12 +242,14 @@ def motion_uncertainty(sigma_points_pred,mean_bar_t):
     #shape array for matrix operations
     sigma_points_pred.shape = (n,1,m)
     #motion model noise
-    R_t = 0.000001*np.identity(n) #update with correct value
+    #R_t = .001*np.identity(n) #update with correct value
+    R_t = np.diag([.01,.01,0.02,0.02,0.01,1,0.01,1])
+
     #initialize output array
     sigma_x_bar_t = np.zeros((n,n))
     #calculate weights
     weights = np.zeros(m)
-    weights[0] = lmda/(n+lmda) + (1-alpha**2+beta)
+    weights[0] = lmda/(n+lmda) + (1-(alpha**2)+beta)
     weights[1:] = 1/(2*(n+lmda))
     #loop through sigma points and add error (using loop bc wrap to pi issues)
     for i in range(m):
@@ -265,7 +267,7 @@ def motion_uncertainty(sigma_points_pred,mean_bar_t):
     return sigma_x_bar_t
 
 
-def motion_regroup(sigma_points_pred,lmda):
+def motion_regroup(sigma_points_pred):
     """regroups the predicted sigma points using a weighted average
 
     Parameters:
@@ -296,7 +298,7 @@ def motion_regroup(sigma_points_pred,lmda):
     sigma_points_pred.shape = (n,m)
     return mean_bar_t
 
-def calc_sigma_points(mean_t_prev, sigma_t_prev, lmda):
+def calc_sigma_points(mean_t_prev, sigma_t_prev):
     """Calculate sigma points to use in prediction and correction step
 
     Parameters:
@@ -313,7 +315,7 @@ def calc_sigma_points(mean_t_prev, sigma_t_prev, lmda):
     sigma_points[:,0] =mean_t_prev[:,0]
     #sigma_t_prev = nearPD(sigma_t_prev)
     sigma_points[:,1:n+1] = mean_t_prev + np.linalg.cholesky((n+lmda)*sigma_t_prev)[:,0:n] #do we need to wrap sigma values?
-    sigma_points[:,n+1:]  = mean_t_prev - np.linalg.cholesky((n+lmda)*sigma_t_prev)[:,0:n]
+    sigma_points[:,n+1:] = mean_t_prev - np.linalg.cholesky((n+lmda)*sigma_t_prev)[:,0:n]
     sigma_points[0,1:] = [wrap_to_pi(x) for x in sigma_points[0,1:]]
     sigma_points[1,1:] = [wrap_to_pi(x) for x in sigma_points[1,1:]]
     sigma_points[4,1:] = [wrap_to_pi(x) for x in sigma_points[4,1:]]
@@ -337,11 +339,11 @@ def prediction_step(mean_t_prev, u_t, sigma_t_prev):
     sigma_points_pred_final (np.array)  -- the predicted sigma points
     """
 
-    sigma_points = calc_sigma_points(mean_t_prev, sigma_t_prev, lmda)
+    sigma_points = calc_sigma_points(mean_t_prev, sigma_t_prev)
     sigma_points_pred = propogate_state(sigma_points,u_t)
-    mean_bar_t = motion_regroup(sigma_points_pred,lmda)
+    mean_bar_t = motion_regroup(sigma_points_pred)
     sigma_x_bar_t = motion_uncertainty(sigma_points_pred,mean_bar_t)
-    sigma_points_pred_final = calc_sigma_points(mean_bar_t,sigma_x_bar_t,lmda)
+    sigma_points_pred_final = calc_sigma_points(mean_bar_t,sigma_x_bar_t)
     
     
 
@@ -392,14 +394,13 @@ def calc_meas_sigma_points(sigma_points_pred_final):
     Returns:
     Z_bar_t (np.array)                  -- measurement matrix (2x17)
     """
-    """  """
+    
     (n,m)= sigma_points_pred_final.shape
     #initialize output array
     Z_bar_t = np.zeros((2,m))
     for i in range(m): 
         Z_bar_t[:,i] = calc_meas_prediction(sigma_points_pred_final[:,i])
-    
-    """  """
+ 
 
     return Z_bar_t
 
@@ -466,7 +467,7 @@ def calc_meas_prediction(x_bar_t):
     # reduce the starboard component by the cosine of the heel (roll) angle
     # to account for out-of-plane measurement of the wind vector
     # note: if we want to account for mast twist later, this is where we do it.
-    app_wind_right_of_vane  = app_wind_stb * np.cos(roll) + MAST_HEIGHT * roll_dot * MS_TO_KNOTS
+    app_wind_right_of_vane  = app_wind_stb * np.cos(roll) #+ MAST_HEIGHT * roll_dot * MS_TO_KNOTS
     app_wind_fwd_of_vane    = app_wind_fwd
 
     # take the angle and magnitude of the relative wind vector in the vane frame
@@ -526,9 +527,8 @@ def meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t):
     Z_bar_t.shape = (nz,1,mz)
 
     #harcode sigma z
-    sigma_z_t = 0.0000001*np.identity(nz)
-    #sigma_z_t = np.zeros((nz,nz))
-
+    #sigma_z_t = 0.0001*np.identity(nz)
+    sigma_z_t = np.diag([0.01,1])
     #initialize output matrices
     sigma_bar_xzt = np.zeros((n,nz))
     S_t = np.zeros((nz,nz))
@@ -586,46 +586,51 @@ def correction_step(mean_bar_t, z_t, sigma_x_bar_t, sigma_points_pred_final):
     mean_est_t[1,0] = wrap_to_pi(mean_est_t[1,0])
     mean_est_t[4,0] = wrap_to_pi(mean_est_t[4,0])
     mean_est_t[6,0] = wrap_to_pi(mean_est_t[6,0])
-    sigma_x_est_t = sigma_x_bar_t - np.matmul(K_t,np.matmul(S_t,K_t.T))
+    K_dot_S = np.matmul(K_t,S_t)
+    sigma_x_est_t = sigma_x_bar_t - np.matmul(K_dot_S,K_t.T)
 
     return mean_est_t, sigma_x_est_t
 
 def plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS, data_TWA, data_TWS):
     plt.figure(1)
-    plt.plot(time_stamps, state_estimates[6,:])
+    plt.plot(time_stamps, state_estimates[6,:], 'r--', label='estimate')
+    plt.plot(time_stamps, data_TWA, label = 'professional')
     plt.xlabel('Time (s)')
     plt.ylabel('TWA (rad from east)')
-    plt.title('Estimated TWA vs Time')
+    plt.legend()
+    plt.title('Estimated and Professional TWA vs Time')
 
     plt.figure(2)
-    plt.plot(time_stamps, state_estimates[7,:])
+    plt.plot(time_stamps, state_estimates[7,:], 'r--', label='estimate')
+    plt.plot(time_stamps, data_TWS, label = 'professional')
     plt.xlabel('Time (s)')
     plt.ylabel('TWS kts')
-    plt.title('Estimated TWS vs Time')
+    plt.legend()
+    plt.title('Estimated and Professional TWS vs Time')
 
-    plt.figure(3)
-    plt.plot(time_stamps, state_estimates[2,:])
-    plt.xlabel('Time (s)')
-    plt.ylabel('\dot{Roll} (rad/s)')
-    plt.title('Roll rate vs Time')
+    # plt.figure(3)
+    # plt.plot(time_stamps, state_estimates[2,:])
+    # plt.xlabel('Time (s)')
+    # plt.ylabel('\dot{Roll} (rad/s)')
+    # plt.title('Roll rate vs Time')
 
-    plt.figure(4)
-    plt.plot(time_stamps, z_AWA)
-    plt.xlabel('Time (s)')
-    plt.ylabel('AWA (rad from starboard)')
-    plt.title('Measured AWA vs Time')
+    # plt.figure(4)
+    # plt.plot(time_stamps, z_AWA)
+    # plt.xlabel('Time (s)')
+    # plt.ylabel('AWA (rad from starboard)')
+    # plt.title('Measured AWA vs Time')
 
-    plt.figure(5)
-    plt.plot(time_stamps, data_TWA)
-    plt.xlabel('Time (s)')
-    plt.ylabel('TWA (rad from east)')
-    plt.title('Professional TWA vs Time')
+    # plt.figure(5)
+    # plt.plot(time_stamps, data_TWA)
+    # plt.xlabel('Time (s)')
+    # plt.ylabel('TWA (rad from east)')
+    # plt.title('Professional TWA vs Time')
 
-    plt.figure(6)
-    plt.plot(time_stamps, data_TWS)
-    plt.xlabel('Time (s)')
-    plt.ylabel('TWS (kts)')
-    plt.title('Professional TWS vs Time')
+    # plt.figure(6)
+    # plt.plot(time_stamps, data_TWS)
+    # plt.xlabel('Time (s)')
+    # plt.ylabel('TWS (kts)')
+    # plt.title('Professional TWS vs Time')
 
     plt.show()
 
@@ -707,15 +712,15 @@ def main():
     u_v_mag = data["SOG"]          
     z_AWA = [wrap_to_pi((np.pi/2) - x*np.pi/180) for x in data["AWA"]]    # AWA is changed into ref E CCW, initially imported w ref N CW
     z_AWS = data["AWS"]
-    data_TWA = [wrap_to_pi(np.pi/2 - x*np.pi/180) for x in data["TWD"]] # TWA is changed into ref E CCW, initially imported w ref N CW
+    data_TWD = [wrap_to_pi(np.pi/2 - x*np.pi/180) for x in data["TWD"]] # TWA is changed into ref E CCW, initially imported w ref N CW
     data_TWS = data["TWS"]
     lat_origin = lat_gps[0]
     lon_origin = lon_gps[0]
 
     #  Initialize filter
     N = 8  # number of states
-    state_est_t_prev = np.array([[u_roll[0],u_yaw[0],0,0,u_v_ang[0],u_v_mag[0],data_TWA[0],data_TWS[0]]]).T #initial state assum global (0,0) is at northwest corner
-    var_est_t_prev = np.identity(N)
+    state_est_t_prev = np.array([[u_roll[0],u_yaw[0],wrap_to_pi(u_roll[1]-u_roll[0])/DT,wrap_to_pi(u_yaw[1]-u_yaw[0])/DT,u_v_ang[0],u_v_mag[0],data_TWD[0],data_TWS[0]]]).T #initial state assum global (0,0) is at northwest corner
+    var_est_t_prev = 0.01*np.identity(N)
 
     state_estimates = np.zeros((N,1, len(time_stamps)))
     covariance_estimates = np.zeros((N, N, len(time_stamps)))
@@ -729,8 +734,7 @@ def main():
         u_t = np.array([[u_roll[t],u_yaw[t],u_v_ang[t],u_v_mag[t]]]).T
 
         # Prediction Step
-        state_pred_t, var_pred_t, sigma_points_pred = prediction_step(state_est_t_prev,u_t,var_est_t_prev)
-        print('cat')
+        state_pred_t, var_pred_t, sigma_points_pred= prediction_step(state_est_t_prev,u_t,var_est_t_prev)
 
         # Get measurement
         z_t = np.array([[z_AWA[t],z_AWS[t]]]).T
@@ -751,10 +755,9 @@ def main():
                                          lat_origin=lat_origin,
                                          lon_origin=lon_origin)
         gps_estimates[:, t] = np.array([x_gps, y_gps])
-    print('stateshape', state_estimates.shape)
     state_estimates.shape = (N,len(time_stamps))
     #plotting
-    plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS, data_TWA, data_TWS)
+    plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS, data_TWD, data_TWS)
     # plt.plot(state_estimates[6,0,:])
     # plt.show()
     return 0
