@@ -49,7 +49,7 @@ DT = 1.03
 EARTH_RADIUS = 6.3781E6  # meters
 MAST_HEIGHT = 10
 MS_TO_KNOTS = 1 #get correct value for this
-lmda = 0.1 #parameters to stretch or condense sigma points
+lmda = 0.3 #parameters to stretch or condense sigma points
 alpha = 0.5
 beta = 2
 
@@ -243,7 +243,7 @@ def motion_uncertainty(sigma_points_pred,mean_bar_t):
     sigma_points_pred.shape = (n,1,m)
     #motion model noise
     #R_t = .0001*np.identity(n) #update with correct value
-    R_t = np.diag([.0001,.0001,0.002,0.002,0.0001,1,0.0001,1])
+    R_t = np.diag([.0001,.0001,0.0001,0.0001,0.0001,1,0.0001,1])
 
     #initialize output array
     sigma_x_bar_t = np.zeros((n,n))
@@ -467,7 +467,7 @@ def calc_meas_prediction(x_bar_t):
     # reduce the starboard component by the cosine of the heel (roll) angle
     # to account for out-of-plane measurement of the wind vector
     # note: if we want to account for mast twist later, this is where we do it.
-    app_wind_right_of_vane  = app_wind_stb * np.cos(roll) #+ MAST_HEIGHT * roll_dot * MS_TO_KNOTS
+    app_wind_right_of_vane  = app_wind_stb * np.cos(roll) + MAST_HEIGHT * roll_dot * MS_TO_KNOTS
     app_wind_fwd_of_vane    = app_wind_fwd
 
     # take the angle and magnitude of the relative wind vector in the vane frame
@@ -528,7 +528,7 @@ def meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t):
 
     #harcode sigma z
     #sigma_z_t = 0.0001*np.identity(nz)
-    sigma_z_t = np.diag([0.001,1])
+    sigma_z_t = np.diag([0.0001,1])
     #initialize output matrices
     sigma_bar_xzt = np.zeros((n,nz))
     S_t = np.zeros((nz,nz))
@@ -720,7 +720,8 @@ def main():
     #  Initialize filter
     N = 8  # number of states
     state_est_t_prev = np.array([[u_roll[0],u_yaw[0],wrap_to_pi(u_roll[1]-u_roll[0])/DT,wrap_to_pi(u_yaw[1]-u_yaw[0])/DT,u_v_ang[0],u_v_mag[0],data_TWD[0],data_TWS[0]]]).T #initial state assum global (0,0) is at northwest corner
-    var_est_t_prev = 0.01*np.identity(N)
+    # var_est_t_prev = 0.01*np.identity(N)
+    var_est_t_prev = np.diag([.0001,.0001,0.0001,0.0001,0.0001,1,0.0001,1])
 
     state_estimates = np.zeros((N,1, len(time_stamps)))
     covariance_estimates = np.zeros((N, N, len(time_stamps)))
