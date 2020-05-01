@@ -49,7 +49,7 @@ DT = 1.03
 EARTH_RADIUS = 6.3781E6  # meters
 MAST_HEIGHT = 10
 MS_TO_KNOTS = 1 #get correct value for this
-lmda = 0.3 #parameters to stretch or condense sigma points
+lmda = 0.1 #parameters to stretch or condense sigma points
 alpha = 0.5
 beta = 2
 
@@ -242,8 +242,8 @@ def motion_uncertainty(sigma_points_pred,mean_bar_t):
     #shape array for matrix operations
     sigma_points_pred.shape = (n,1,m)
     #motion model noise
-    #R_t = .001*np.identity(n) #update with correct value
-    R_t = np.diag([.01,.01,0.02,0.02,0.01,1,0.01,1])
+    #R_t = .0001*np.identity(n) #update with correct value
+    R_t = np.diag([.0001,.0001,0.002,0.002,0.0001,1,0.0001,1])
 
     #initialize output array
     sigma_x_bar_t = np.zeros((n,n))
@@ -316,10 +316,10 @@ def calc_sigma_points(mean_t_prev, sigma_t_prev):
     #sigma_t_prev = nearPD(sigma_t_prev)
     sigma_points[:,1:n+1] = mean_t_prev + np.linalg.cholesky((n+lmda)*sigma_t_prev)[:,0:n] #do we need to wrap sigma values?
     sigma_points[:,n+1:] = mean_t_prev - np.linalg.cholesky((n+lmda)*sigma_t_prev)[:,0:n]
-    sigma_points[0,1:] = [wrap_to_pi(x) for x in sigma_points[0,1:]]
-    sigma_points[1,1:] = [wrap_to_pi(x) for x in sigma_points[1,1:]]
-    sigma_points[4,1:] = [wrap_to_pi(x) for x in sigma_points[4,1:]]
-    sigma_points[6,1:] = [wrap_to_pi(x) for x in sigma_points[6,1:]]
+    # sigma_points[0,1:] = [wrap_to_pi(x) for x in sigma_points[0,1:]]
+    # sigma_points[1,1:] = [wrap_to_pi(x) for x in sigma_points[1,1:]]
+    # sigma_points[4,1:] = [wrap_to_pi(x) for x in sigma_points[4,1:]]
+    # sigma_points[6,1:] = [wrap_to_pi(x) for x in sigma_points[6,1:]]
 
     print('big guy', sigma_points[:,0])
     return sigma_points
@@ -528,7 +528,7 @@ def meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t):
 
     #harcode sigma z
     #sigma_z_t = 0.0001*np.identity(nz)
-    sigma_z_t = np.diag([0.01,1])
+    sigma_z_t = np.diag([0.001,1])
     #initialize output matrices
     sigma_bar_xzt = np.zeros((n,nz))
     S_t = np.zeros((nz,nz))
@@ -739,7 +739,8 @@ def main():
         # Get measurement
         z_t = np.array([[z_AWA[t],z_AWS[t]]]).T
 
-        #plot_sigma_points(sigma_points_pred, data_TWA[t], data_TWS[t])
+        if t%100 == 0:
+            plot_sigma_points(sigma_points_pred, data_TWD[t], data_TWS[t])
         #Correction Step
         state_est_t, var_est_t = correction_step(state_pred_t,z_t,var_pred_t,sigma_points_pred)
         
