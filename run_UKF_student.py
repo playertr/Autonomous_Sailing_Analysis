@@ -49,9 +49,9 @@ DT = 1.03
 EARTH_RADIUS = 6.3781E6  # meters
 MAST_HEIGHT = 10
 MS_TO_KNOTS = 1 #get correct value for this
-lmda = 1 #parameters to stretch or condense sigma points
-alpha = 1
-beta = 1
+lmda = 1.0 #parameters to stretch or condense sigma points
+alpha = .5
+beta = 2.0
 
 
 def load_data(filename):
@@ -669,7 +669,7 @@ def main():
     data_TWS = data["TWS"]
     lat_origin = lat_gps[0]
     lon_origin = lon_gps[0]
-    pdb.set_trace()
+    #pdb.set_trace()
 
     #  Initialize filter
     N = 8  # number of states

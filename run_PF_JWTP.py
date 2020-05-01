@@ -55,18 +55,18 @@ STDDEV_INIT = 20 # in any dimension, the initial particle array with be randomiz
 # Propagation variance  (1-second timestep)
 # 0.0872665 radians = 5 degrees
 # 0.261799 radians  = 15 degrees
-STDDEV_ROLL         = 0.01
-STDDEV_YAW          = 0.0872665
-STDDEV_ROLL_DOT     = 0.01
-STDDEV_YAW_DOT      = 0.01
-STDDEV_V_ANG        = 0.0872665
-STDDEV_V_MAG        = 1
-STDDEV_TWD          = 2 * 0.01745
-STDDEV_TWS          = 0.5
+STDDEV_ROLL         = 0.01745 # radians, 1 deg
+STDDEV_YAW          = 2 * 0.01745 # radians, 5 deg
+STDDEV_ROLL_DOT     = 0.01 # m/s^2
+STDDEV_YAW_DOT      = 0.01 # m/s^2
+STDDEV_V_ANG        = 2 * 0.01745 # radians, 5 deg
+STDDEV_V_MAG        = 0.5 #m/s
+STDDEV_TWD          = 2 * 0.01745 # radians, 1 deg
+STDDEV_TWS          = 0.5 # m/s
 
 # Measurement variance
-STDDEV_MEAS_AWA     = 0.01745 # 1 deg
-STDDEV_MEAS_AWS     = 0.5
+STDDEV_MEAS_AWA     = 2 * 0.01745 # radians, 1 deg
+STDDEV_MEAS_AWS     = 0.5 # m/s
 
 DELTA_T = 1.0275 # seconds
 
@@ -355,14 +355,23 @@ def calc_mean_state(P_t):
     """
     # if we expect our particles to diverge into multiple clumps, we could implement a clustering algorithm here!
     # weighted average of multiple numbers: a*x1 + b*x2 + c*x3 / 3
-    roll_mean       = np.average(P_t[0,:], weights=P_t[-1,:])
-    yaw_mean        = np.average(P_t[1,:], weights=P_t[-1,:])
-    roll_dot_mean   = np.average(P_t[2,:], weights=P_t[-1,:])
-    yaw_dot_mean    = np.average(P_t[3,:], weights=P_t[-1,:])
-    v_ang_mean      = np.average(P_t[4,:], weights=P_t[-1,:])
-    v_mag_dot_mean  = np.average(P_t[5,:], weights=P_t[-1,:])
-    TWD_mean        = np.average(P_t[6,:], weights=P_t[-1,:])
-    TWS_mean        = np.average(P_t[7,:], weights=P_t[-1,:])
+    roll_mean       = np.average(P_t[0,:])
+    yaw_mean        = np.average(P_t[1,:])
+    roll_dot_mean   = np.average(P_t[2,:])
+    yaw_dot_mean    = np.average(P_t[3,:])
+    v_ang_mean      = np.average(P_t[4,:])
+    v_mag_dot_mean  = np.average(P_t[5,:])
+    TWD_mean        = np.average(P_t[6,:])
+    TWS_mean        = np.average(P_t[7,:])
+
+    # roll_mean       = np.average(P_t[0,:], weights=P_t[-1,:])
+    # yaw_mean        = np.average(P_t[1,:], weights=P_t[-1,:])
+    # roll_dot_mean   = np.average(P_t[2,:], weights=P_t[-1,:])
+    # yaw_dot_mean    = np.average(P_t[3,:], weights=P_t[-1,:])
+    # v_ang_mean      = np.average(P_t[4,:], weights=P_t[-1,:])
+    # v_mag_dot_mean  = np.average(P_t[5,:], weights=P_t[-1,:])
+    # TWD_mean        = np.average(P_t[6,:], weights=P_t[-1,:])
+    # TWS_mean        = np.average(P_t[7,:], weights=P_t[-1,:])
 
 
     state_est_t = np.array([roll_mean, yaw_mean, roll_dot_mean, yaw_dot_mean, v_ang_mean, v_mag_dot_mean, TWD_mean, TWS_mean])
@@ -412,41 +421,63 @@ def correction_step(P_t_predict, z_t):
     return P_t, state_est_t
 
 def plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS, data_TWD, data_TWS):
-    plt.figure(1)
-    plt.plot(time_stamps, state_estimates[6,:])
-    plt.xlabel('Time (s)')
-    plt.ylabel('TWD (rad from east)')
-    plt.title('Estimated TWD vs Time')
+    fig, axs = plt.subplots(2,2)
 
-    plt.figure(2)
-    plt.plot(time_stamps, state_estimates[7,:])
-    plt.xlabel('Time (s)')
-    plt.ylabel('TWS kts')
-    plt.title('Estimated TWS vs Time')
+    axs[0,0].plot(time_stamps, state_estimates[6,:], color='g', label='PF Estimate', linewidth=1, zorder = 10)
+    axs[0,0].plot(time_stamps, data_TWD, color='r', label='Professional Estimate', linewidth=1, zorder = 0)
+    axs[0,0].set(xlabel='Time (s)', ylabel='TWD (rad from east)')
+    axs[0,0].set_title('TWD vs Time')
+    axs[0,0].legend()
 
-    plt.figure(3)
-    plt.plot(time_stamps, state_estimates[2,:])
-    plt.xlabel('Time (s)')
-    plt.ylabel('\dot{Roll} (rad/s)')
-    plt.title('Roll rate vs Time')
 
-    plt.figure(4)
-    plt.plot(time_stamps, z_AWA)
-    plt.xlabel('Time (s)')
-    plt.ylabel('AWA (rad from starboard)')
-    plt.title('Measured AWA vs Time')
+    axs[1,0].plot(time_stamps, state_estimates[7,:], color='g', label='PF Estimate', linewidth=1, zorder = 10)
+    axs[1,0].plot(time_stamps, data_TWS, color='r', label='Professional Estimate', linewidth=1, zorder = 0)
+    axs[1,0].set(xlabel='Time (s)', ylabel='TWS kts')
+    axs[1,0].set_title('TWS vs Time')
+    axs[1,0].legend()
 
-    plt.figure(5)
-    plt.plot(time_stamps, data_TWD)
-    plt.xlabel('Time (s)')
-    plt.ylabel('TWD (rad from east)')
-    plt.title('Professional TWD vs Time')
+    axs[0,1].plot(time_stamps, state_estimates[2,:], linewidth=1)
+    axs[0,1].set(xlabel='Time (s)', ylabel='Roll dot (rad/s)')
+    axs[0,1].set_title('Measured Roll rate vs Time')
 
-    plt.figure(6)
-    plt.plot(time_stamps, data_TWS)
-    plt.xlabel('Time (s)')
-    plt.ylabel('TWS (kts)')
-    plt.title('Professional TWS vs Time')
+    axs[1,1].plot(time_stamps, z_AWA, linewidth=1)
+    axs[1,1].set(xlabel='Time (s)', ylabel='AWA (rad from starboard)')
+    axs[1,1].set_title('Measured AWA vs Time')
+
+
+    # plt.figure(1)
+    # plt.plot(time_stamps, state_estimates[6,:], color='g', label='PF Estimate')
+    # plt.xlabel('Time (s)')
+    # plt.ylabel('TWD (rad from east)')
+    # plt.title('TWD vs Time')
+    # plt.legend()
+
+
+    # plt.figure(2)
+    # plt.plot(time_stamps, state_estimates[7,:], color='g', label='PF Estimate')
+    # plt.xlabel('Time (s)')
+    # plt.ylabel('TWS kts')
+    # plt.title('TWS vs Time')
+    # plt.legend()
+
+    # plt.figure(3)
+    # plt.plot(time_stamps, state_estimates[2,:])
+    # plt.xlabel('Time (s)')
+    # plt.ylabel('Roll dot (rad/s)')
+    # plt.title('Roll rate vs Time')
+
+    # plt.figure(4)
+    # plt.plot(time_stamps, z_AWA)
+    # plt.xlabel('Time (s)')
+    # plt.ylabel('AWA (rad from starboard)')
+    # plt.title('Measured AWA vs Time')
+
+    # plt.figure(1)
+    # plt.plot(time_stamps, data_TWD, color='r', label='Professional Estimate')
+
+    # plt.figure(2)
+    # plt.plot(time_stamps, data_TWS, color='r', label='Professional Estimate')
+
 
     plt.show()
 
@@ -568,7 +599,7 @@ def main():
 
     plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS, data_TWD, data_TWS)
     pdb.set_trace()
-    print(RMSE[-1])
+    #print(RMSE[-1])
 
     return 0
 
