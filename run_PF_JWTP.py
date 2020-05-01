@@ -193,12 +193,19 @@ def wrap_to_pi(angle):
     Returns:
     angle (float)   -- wrapped angle
     """
-    while angle >= math.pi:
+    while angle >= 2*math.pi:
         angle -= 2*math.pi
 
-    while angle <= -math.pi:
+    while angle <= 0:
         angle += 2*math.pi
     return angle
+
+    # while angle >= math.pi: 
+    #     angle -= 2*math.pi
+
+    # while angle <= -math.pi:
+    #     angle += 2*math.pi
+    # return angle
 
 
 def propagate_state(x_t_prev, u_t):
