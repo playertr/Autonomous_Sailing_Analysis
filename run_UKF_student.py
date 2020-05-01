@@ -49,9 +49,9 @@ DT = 1.03
 EARTH_RADIUS = 6.3781E6  # meters
 MAST_HEIGHT = 10
 MS_TO_KNOTS = 1 #get correct value for this
-lmda = 1 #parameters to stretch or condense sigma points
-alpha = 1
-beta = 1
+lmda = 1.0 #parameters to stretch or condense sigma points
+alpha = 0.5
+beta = 2.0
 
 
 def load_data(filename):
@@ -274,7 +274,6 @@ def motion_regroup(sigma_points_pred,lmda):
     Returns:
     mean_bar_t (np.array)            -- predicted state estimate
     """
-
     #get input matrix shape
     (n,m)= sigma_points_pred.shape
     #reshape for matrix operations
@@ -312,8 +311,9 @@ def calc_sigma_points(mean_t_prev, sigma_t_prev, lmda):
     #how dow we deal with negative covariances in sqrt?
     sigma_points = np.zeros((n,2*n +1))
     sigma_points[:,0] =mean_t_prev[:,0]
+    #sigma_t_prev = nearPD(sigma_t_prev)
     sigma_points[:,1:n+1] = mean_t_prev + np.linalg.cholesky((n+lmda)*sigma_t_prev)[:,0:n] #do we need to wrap sigma values?
-    sigma_points[:,n+1:] = mean_t_prev + np.linalg.cholesky((n+lmda)*sigma_t_prev)[:,0:n]
+    sigma_points[:,n+1:]  = mean_t_prev - np.linalg.cholesky((n+lmda)*sigma_t_prev)[:,0:n]
     sigma_points[0,1:] = [wrap_to_pi(x) for x in sigma_points[0,1:]]
     sigma_points[1,1:] = [wrap_to_pi(x) for x in sigma_points[1,1:]]
     sigma_points[4,1:] = [wrap_to_pi(x) for x in sigma_points[4,1:]]
@@ -629,6 +629,48 @@ def plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS, data_TWA, data_TWS):
 
     plt.show()
 
+def _getAplus(A):
+    eigval, eigvec = np.linalg.eig(A)
+    Q = np.matrix(eigvec)
+    xdiag = np.matrix(np.diag(np.maximum(eigval, 0)))
+    return Q*xdiag*Q.T
+
+def _getPs(A, W=None):
+    W05 = np.matrix(W**.5)
+    return  W05.I * _getAplus(W05 * A * W05) * W05.I
+
+def _getPu(A, W=None):
+    Aret = np.array(A.copy())
+    Aret[W > 0] = np.array(W)[W > 0]
+    return np.matrix(Aret)
+
+def nearPD(A, nit=10):
+    n = A.shape[0]
+    W = np.identity(n) 
+# W is the matrix used for the norm (assumed to be Identity matrix here)
+# the algorithm should work for any diagonal W
+    deltaS = 0
+    Yk = A.copy()
+    for k in range(nit):
+        Rk = Yk - deltaS
+        Xk = _getPs(Rk, W=W)
+        deltaS = Xk - Rk
+        Yk = _getPu(Xk, W=W)
+    return Yk
+
+def plot_sigma_points(sigma_points_pred, pro_TWD, pro_TWS):
+    # sigma points are an n x 2n+1 matrix
+    # the last two rows are the TWD and TWS respectively
+    plt.figure(1)
+    for j in range(sigma_points_pred.shape[-1]):
+        plt.scatter(sigma_points_pred[-2, j], sigma_points_pred[-1, j])
+    plt.scatter(pro_TWD, pro_TWS, marker='*')
+    plt.xlabel('TWD')
+    plt.ylabel('TWS')
+    plt.xlim(-2*np.pi, 2*np.pi)
+    plt.ylim(0,25)
+    plt.show()
+
 
 def main():
     """Run a UKF on logged data from a
@@ -669,7 +711,6 @@ def main():
     data_TWS = data["TWS"]
     lat_origin = lat_gps[0]
     lon_origin = lon_gps[0]
-    pdb.set_trace()
 
     #  Initialize filter
     N = 8  # number of states
@@ -688,11 +729,13 @@ def main():
         u_t = np.array([[u_roll[t],u_yaw[t],u_v_ang[t],u_v_mag[t]]]).T
 
         # Prediction Step
-        state_pred_t, var_pred_t, sigma_points_pred= prediction_step(state_est_t_prev,u_t,var_est_t_prev)
+        state_pred_t, var_pred_t, sigma_points_pred = prediction_step(state_est_t_prev,u_t,var_est_t_prev)
         print('cat')
 
         # Get measurement
         z_t = np.array([[z_AWA[t],z_AWS[t]]]).T
+
+        #plot_sigma_points(sigma_points_pred, data_TWA[t], data_TWS[t])
         #Correction Step
         state_est_t, var_est_t = correction_step(state_pred_t,z_t,var_pred_t,sigma_points_pred)
         
