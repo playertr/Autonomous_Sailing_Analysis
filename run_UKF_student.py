@@ -49,8 +49,8 @@ DT = 1.03
 EARTH_RADIUS = 6.3781E6  # meters
 MAST_HEIGHT = 10
 MS_TO_KNOTS = 1 #get correct value for this
-lmda = 1 #parameters to stretch or condense sigma points
-alpha = 0.7
+lmda = 0.3 #parameters to stretch or condense sigma points
+alpha = 0.5
 beta = 2
 
 
@@ -242,7 +242,9 @@ def motion_uncertainty(sigma_points_pred,mean_bar_t):
     #shape array for matrix operations
     sigma_points_pred.shape = (n,1,m)
     #motion model noise
-    R_t = .001*np.identity(n) #update with correct value
+    #R_t = .001*np.identity(n) #update with correct value
+    R_t = np.diag([.01,.01,0.02,0.02,0.01,1,0.01,1])
+
     #initialize output array
     sigma_x_bar_t = np.zeros((n,n))
     #calculate weights
@@ -525,9 +527,8 @@ def meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t):
     Z_bar_t.shape = (nz,1,mz)
 
     #harcode sigma z
-    sigma_z_t = 0.000001*np.identity(nz)
-    #sigma_z_t = np.zeros((nz,nz))
-
+    #sigma_z_t = 0.0001*np.identity(nz)
+    sigma_z_t = np.diag([0.01,1])
     #initialize output matrices
     sigma_bar_xzt = np.zeros((n,nz))
     S_t = np.zeros((nz,nz))
@@ -592,40 +593,44 @@ def correction_step(mean_bar_t, z_t, sigma_x_bar_t, sigma_points_pred_final):
 
 def plot_graphs(time_stamps, state_estimates, z_AWA, z_AWS, data_TWA, data_TWS):
     plt.figure(1)
-    plt.plot(time_stamps, state_estimates[6,:])
+    plt.plot(time_stamps, state_estimates[6,:], 'r--', label='estimate')
+    plt.plot(time_stamps, data_TWA, label = 'professional')
     plt.xlabel('Time (s)')
     plt.ylabel('TWA (rad from east)')
-    plt.title('Estimated TWA vs Time')
+    plt.legend()
+    plt.title('Estimated and Professional TWA vs Time')
 
     plt.figure(2)
-    plt.plot(time_stamps, state_estimates[7,:])
+    plt.plot(time_stamps, state_estimates[7,:], 'r--', label='estimate')
+    plt.plot(time_stamps, data_TWS, label = 'professional')
     plt.xlabel('Time (s)')
     plt.ylabel('TWS kts')
-    plt.title('Estimated TWS vs Time')
+    plt.legend()
+    plt.title('Estimated and Professional TWS vs Time')
 
-    plt.figure(3)
-    plt.plot(time_stamps, state_estimates[2,:])
-    plt.xlabel('Time (s)')
-    plt.ylabel('\dot{Roll} (rad/s)')
-    plt.title('Roll rate vs Time')
+    # plt.figure(3)
+    # plt.plot(time_stamps, state_estimates[2,:])
+    # plt.xlabel('Time (s)')
+    # plt.ylabel('\dot{Roll} (rad/s)')
+    # plt.title('Roll rate vs Time')
 
-    plt.figure(4)
-    plt.plot(time_stamps, z_AWA)
-    plt.xlabel('Time (s)')
-    plt.ylabel('AWA (rad from starboard)')
-    plt.title('Measured AWA vs Time')
+    # plt.figure(4)
+    # plt.plot(time_stamps, z_AWA)
+    # plt.xlabel('Time (s)')
+    # plt.ylabel('AWA (rad from starboard)')
+    # plt.title('Measured AWA vs Time')
 
-    plt.figure(5)
-    plt.plot(time_stamps, data_TWA)
-    plt.xlabel('Time (s)')
-    plt.ylabel('TWA (rad from east)')
-    plt.title('Professional TWA vs Time')
+    # plt.figure(5)
+    # plt.plot(time_stamps, data_TWA)
+    # plt.xlabel('Time (s)')
+    # plt.ylabel('TWA (rad from east)')
+    # plt.title('Professional TWA vs Time')
 
-    plt.figure(6)
-    plt.plot(time_stamps, data_TWS)
-    plt.xlabel('Time (s)')
-    plt.ylabel('TWS (kts)')
-    plt.title('Professional TWS vs Time')
+    # plt.figure(6)
+    # plt.plot(time_stamps, data_TWS)
+    # plt.xlabel('Time (s)')
+    # plt.ylabel('TWS (kts)')
+    # plt.title('Professional TWS vs Time')
 
     plt.show()
 
