@@ -206,7 +206,7 @@ def angle_diff(angle1, angle2):
     takes difference of two angle values
     anglediff = angle1 - angle2
     """
-    anglediff = angle1 - angle2
+    angle_diff = angle1 - angle2
 
     while angle_diff >= math.pi: 
         angle_diff -= 2*math.pi
