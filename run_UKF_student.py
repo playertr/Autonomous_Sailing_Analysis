@@ -53,6 +53,14 @@ lmda = 0.3 #parameters to stretch or condense sigma points
 alpha = 0.5
 beta = 2
 
+#initial covariance matrix
+var_initial_diag = np.diag([.0001,.0001,0.0001,0.0001,0.0001,0.001,0.0001,0.001])
+#motion model noise
+R_t = np.diag([.0001,.0001,0.0001,0.0001,0.0001,0.05,0.0005,0.05])
+#measurement noise
+sigma_z_t = np.diag([0.000001,1])
+
+
 
 def load_data(filename):
     """Load data from the csv log
@@ -241,9 +249,6 @@ def motion_uncertainty(sigma_points_pred,mean_bar_t):
     (n,m) = sigma_points_pred.shape
     #shape array for matrix operations
     sigma_points_pred.shape = (n,1,m)
-    #motion model noise
-    #R_t = .0001*np.identity(n) #update with correct value
-    R_t = np.diag([.0001,.0001,0.0001,0.0001,0.0001,1,0.0001,1])
 
     #initialize output array
     sigma_x_bar_t = np.zeros((n,n))
@@ -526,9 +531,6 @@ def meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t):
     sigma_points_pred_final.shape = (n,1,m)
     Z_bar_t.shape = (nz,1,mz)
 
-    #harcode sigma z
-    #sigma_z_t = 0.0001*np.identity(nz)
-    sigma_z_t = np.diag([0.0001,1])
     #initialize output matrices
     sigma_bar_xzt = np.zeros((n,nz))
     S_t = np.zeros((nz,nz))
@@ -721,7 +723,7 @@ def main():
     N = 8  # number of states
     state_est_t_prev = np.array([[u_roll[0],u_yaw[0],wrap_to_pi(u_roll[1]-u_roll[0])/DT,wrap_to_pi(u_yaw[1]-u_yaw[0])/DT,u_v_ang[0],u_v_mag[0],data_TWD[0],data_TWS[0]]]).T #initial state assum global (0,0) is at northwest corner
     # var_est_t_prev = 0.01*np.identity(N)
-    var_est_t_prev = np.diag([.0001,.0001,0.0001,0.0001,0.0001,1,0.0001,1])
+    var_est_t_prev = var_initial_diag
 
     state_estimates = np.zeros((N,1, len(time_stamps)))
     covariance_estimates = np.zeros((N, N, len(time_stamps)))
