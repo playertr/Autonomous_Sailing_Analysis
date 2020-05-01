@@ -200,13 +200,20 @@ def wrap_to_pi(angle):
         angle += 2*math.pi
     return angle
 
-    # while angle >= math.pi: 
-    #     angle -= 2*math.pi
 
-    # while angle <= -math.pi:
-    #     angle += 2*math.pi
-    # return angle
+def angle_diff(angle1, angle2):
+    """
+    takes difference of two angle values
+    anglediff = angle1 - angle2
+    """
+    anglediff = angle1 - angle2
 
+    while angle_diff >= math.pi: 
+        angle_diff -= 2*math.pi
+
+    while angle_diff <= -math.pi:
+        angle_diff += 2*math.pi
+    return angle_diff
 
 def propagate_state(x_t_prev, u_t):
     """propagate/predict the state based on chosen motion model
@@ -233,8 +240,8 @@ def propagate_state(x_t_prev, u_t):
 
     roll        = u_roll                                + np.random.normal(0, STDDEV_ROLL)
     yaw         = u_yaw                                 + np.random.normal(0, STDDEV_YAW)
-    roll_dot    = wrap_to_pi(roll - x_roll) / DELTA_T   + np.random.normal(0, STDDEV_ROLL_DOT)
-    yaw_dot     = wrap_to_pi(yaw - x_yaw) / DELTA_T     + np.random.normal(0, STDDEV_YAW_DOT)
+    roll_dot    = angle_diff(roll, x_roll) / DELTA_T   + np.random.normal(0, STDDEV_ROLL_DOT)
+    yaw_dot     = angle_diff(yaw, x_yaw) / DELTA_T     + np.random.normal(0, STDDEV_YAW_DOT)
     v_ang       = wrap_to_pi(u_v_ang                    + np.random.normal(0, STDDEV_V_ANG))
     v_mag       = u_v_mag                               + np.random.normal(0, STDDEV_V_MAG)
     TWD         = wrap_to_pi(x_TWD                      + np.random.normal(0, STDDEV_TWD))
