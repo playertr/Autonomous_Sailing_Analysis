@@ -55,14 +55,14 @@ STDDEV_INIT = 20 # in any dimension, the initial particle array with be randomiz
 # Propagation variance  (1-second timestep)
 # 0.0872665 radians = 5 degrees
 # 0.261799 radians  = 15 degrees
-STDDEV_ROLL         = 0.01745 # radians, 1 deg
-STDDEV_YAW          = 2 * 0.01745 # radians, 5 deg
-STDDEV_ROLL_DOT     = 0.01 # m/s^2
-STDDEV_YAW_DOT      = 0.01 # m/s^2
-STDDEV_V_ANG        = 2 * 0.01745 # radians, 5 deg
-STDDEV_V_MAG        = 0.5 #m/s
-STDDEV_TWD          = 2 * 0.01745 # radians, 1 deg
-STDDEV_TWS          = 0.5 # m/s
+STDDEV_ROLL         = 0.01745       # radians, 1 deg
+STDDEV_YAW          = 2 * 0.01745   # radians, 2 deg
+STDDEV_ROLL_DOT     = 0.01          # m/s^2
+STDDEV_YAW_DOT      = 0.01          # m/s^2
+STDDEV_V_ANG        = 2 * 0.01745   # radians, 2 deg
+STDDEV_V_MAG        = 0.5           #m/s
+STDDEV_TWD          = 2 * 0.01745   # radians, 1 deg
+STDDEV_TWS          = 0.5           # m/s
 
 # Measurement variance
 STDDEV_MEAS_AWA     = 2 * 0.01745 # radians, 1 deg
