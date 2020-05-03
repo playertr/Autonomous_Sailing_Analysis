@@ -49,9 +49,22 @@ DT = 1.03
 EARTH_RADIUS = 6.3781E6  # meters
 MAST_HEIGHT = 10
 MS_TO_KNOTS = 1 #get correct value for this
-lmda = 0.3 #parameters to stretch or condense sigma points
+lmda = 0.1 #parameters to stretch or condense sigma points
 alpha = 0.5
 beta = 2
+
+# These are the components of the state
+    # roll      = x_bar_t[0]
+    # yaw       = x_bar_t[1]
+    # roll_dot  = x_bar_t[2]
+    # yaw_dot   = x_bar_t[3]
+    # v_ang     = x_bar_t[4]
+    # v_mag     = x_bar_t[5]
+    # TWA       = x_bar_t[6]
+    # TWS       = x_bar_t[7]
+INIT_COV_MATRIX = np.diag([.0001,.0001,0.0001,0.0001,0.0001,0.001,0.0001,0.001])
+R_T = np.diag([.001,.001,0.001,0.001,0.001,0.1,0.001,0.1])
+sigma_z_t = np.diag([0.0001,0.05])
 
 
 def load_data(filename):
@@ -243,7 +256,7 @@ def motion_uncertainty(sigma_points_pred,mean_bar_t):
     sigma_points_pred.shape = (n,1,m)
     #motion model noise
     #R_t = .0001*np.identity(n) #update with correct value
-    R_t = np.diag([.0001,.0001,0.0001,0.0001,0.0001,1,0.0001,1])
+    R_t = R_T
 
     #initialize output array
     sigma_x_bar_t = np.zeros((n,n))
@@ -528,7 +541,7 @@ def meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t):
 
     #harcode sigma z
     #sigma_z_t = 0.0001*np.identity(nz)
-    sigma_z_t = np.diag([0.0001,1])
+    # sigma_z_t = np.diag([0.0001,1])
     #initialize output matrices
     sigma_bar_xzt = np.zeros((n,nz))
     S_t = np.zeros((nz,nz))
@@ -666,7 +679,19 @@ def nearPD(A, nit=10):
 def plot_sigma_points(sigma_points_pred, pro_TWD, pro_TWS):
     # sigma points are an n x 2n+1 matrix
     # the last two rows are the TWD and TWS respectively
+    # These are the components of the state
+    # roll      = x_bar_t[0]
+    # yaw       = x_bar_t[1]
+    # roll_dot  = x_bar_t[2]
+    # yaw_dot   = x_bar_t[3]
+    # v_ang     = x_bar_t[4]
+    # v_mag     = x_bar_t[5]
+    # TWA       = x_bar_t[6]
+    # TWS       = x_bar_t[7]
+
     plt.figure(1)
+    plt.clf()
+    plt.subplot(2,2,1)
     for j in range(sigma_points_pred.shape[-1]):
         plt.scatter(sigma_points_pred[-2, j], sigma_points_pred[-1, j])
     plt.scatter(pro_TWD, pro_TWS, marker='*')
@@ -674,7 +699,35 @@ def plot_sigma_points(sigma_points_pred, pro_TWD, pro_TWS):
     plt.ylabel('TWS')
     plt.xlim(-2*np.pi, 2*np.pi)
     plt.ylim(0,25)
-    plt.show()
+
+    plt.subplot(2,2,2)
+    for j in range(sigma_points_pred.shape[-1]):
+        plt.scatter(sigma_points_pred[0, j], sigma_points_pred[2, j])
+    plt.xlabel('Roll')
+    plt.ylabel('Roll_dot')
+    plt.xlim(-2*np.pi, 2*np.pi)
+    plt.ylim(-0.5,0.5)
+
+    plt.subplot(2,2,3)
+
+    for j in range(sigma_points_pred.shape[-1]):
+        plt.scatter(sigma_points_pred[1, j], sigma_points_pred[3, j])
+    plt.xlabel('Yaw')
+    plt.ylabel('Yaw_dot')
+    plt.xlim(-2*np.pi, 2*np.pi)
+    plt.ylim(-0.5,0.5)
+
+    plt.subplot(2,2,4)
+
+    for j in range(sigma_points_pred.shape[-1]):
+        plt.scatter(sigma_points_pred[4, j], sigma_points_pred[5, j])
+    plt.xlabel('V_ang')
+    plt.ylabel('V_mag')
+    plt.xlim(-2*np.pi, 2*np.pi)
+    plt.ylim(0, 20)
+    plt.pause(0.01)
+
+    
 
 
 def main():
@@ -721,7 +774,7 @@ def main():
     N = 8  # number of states
     state_est_t_prev = np.array([[u_roll[0],u_yaw[0],wrap_to_pi(u_roll[1]-u_roll[0])/DT,wrap_to_pi(u_yaw[1]-u_yaw[0])/DT,u_v_ang[0],u_v_mag[0],data_TWD[0],data_TWS[0]]]).T #initial state assum global (0,0) is at northwest corner
     # var_est_t_prev = 0.01*np.identity(N)
-    var_est_t_prev = np.diag([.0001,.0001,0.0001,0.0001,0.0001,1,0.0001,1])
+    var_est_t_prev = INIT_COV_MATRIX
 
     state_estimates = np.zeros((N,1, len(time_stamps)))
     covariance_estimates = np.zeros((N, N, len(time_stamps)))
@@ -740,7 +793,7 @@ def main():
         # Get measurement
         z_t = np.array([[z_AWA[t],z_AWS[t]]]).T
 
-        if t%100 == 0:
+        if t%10 == 0:
             plot_sigma_points(sigma_points_pred, data_TWD[t], data_TWS[t])
         #Correction Step
         state_est_t, var_est_t = correction_step(state_pred_t,z_t,var_pred_t,sigma_points_pred)
