@@ -49,16 +49,17 @@ DT = 1.03
 EARTH_RADIUS = 6.3781E6  # meters
 MAST_HEIGHT = 10
 MS_TO_KNOTS = 1 #get correct value for this
-lmda = 0.3 #parameters to stretch or condense sigma points
+kappa = 0
 alpha = 0.5
 beta = 2
+lmda = (alpha**2)*(8+kappa)-8 #parameters to stretch or condense sigma points: hardcoded #statevariables
 
 #initial covariance matrix
-var_initial_diag = np.diag([.0001,.0001,0.0001,0.0001,0.0001,0.001,0.0001,0.001])
+var_initial_diag = np.diag([.01,.01,0.04,0.04,0.01,0.1,0.05,0.5])
 #motion model noise
-R_t = np.diag([.0001,.0001,0.0001,0.0001,0.0001,0.05,0.0005,0.05])
+R_t = np.diag([.01,.01,0.04,0.04,0.01,0.1,0.05,.5])
 #measurement noise
-sigma_z_t = np.diag([0.000001,1])
+sigma_z_t = np.diag([0.01,.1])
 
 
 
@@ -326,7 +327,6 @@ def calc_sigma_points(mean_t_prev, sigma_t_prev):
     # sigma_points[4,1:] = [wrap_to_pi(x) for x in sigma_points[4,1:]]
     # sigma_points[6,1:] = [wrap_to_pi(x) for x in sigma_points[6,1:]]
 
-    print('big guy', sigma_points[:,0])
     return sigma_points
 
 
