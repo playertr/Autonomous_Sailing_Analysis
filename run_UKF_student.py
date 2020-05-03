@@ -49,9 +49,18 @@ DT = 1.03
 EARTH_RADIUS = 6.3781E6  # meters
 MAST_HEIGHT = 10
 MS_TO_KNOTS = 1 #get correct value for this
-lmda = 0.1 #parameters to stretch or condense sigma points
+kappa = 0
 alpha = 0.5
 beta = 2
+lmda = (alpha**2)*(8+kappa)-8 #parameters to stretch or condense sigma points: hardcoded #statevariables
+
+#initial covariance matrix
+var_initial_diag = np.diag([.01,.01,0.04,0.04,0.01,0.1,0.05,0.5])
+#motion model noise
+R_t = np.diag([.01,.01,0.04,0.04,0.01,0.1,0.05,.5])
+#measurement noise
+sigma_z_t = np.diag([0.01,.1])
+
 
 # These are the components of the state
     # roll      = x_bar_t[0]
@@ -254,9 +263,6 @@ def motion_uncertainty(sigma_points_pred,mean_bar_t):
     (n,m) = sigma_points_pred.shape
     #shape array for matrix operations
     sigma_points_pred.shape = (n,1,m)
-    #motion model noise
-    #R_t = .0001*np.identity(n) #update with correct value
-    R_t = R_T
 
     #initialize output array
     sigma_x_bar_t = np.zeros((n,n))
@@ -334,7 +340,6 @@ def calc_sigma_points(mean_t_prev, sigma_t_prev):
     # sigma_points[4,1:] = [wrap_to_pi(x) for x in sigma_points[4,1:]]
     # sigma_points[6,1:] = [wrap_to_pi(x) for x in sigma_points[6,1:]]
 
-    print('big guy', sigma_points[:,0])
     return sigma_points
 
 
@@ -539,9 +544,6 @@ def meas_uncertainty(sigma_points_pred_final,Z_bar_t,z_bar_t, mean_bar_t):
     sigma_points_pred_final.shape = (n,1,m)
     Z_bar_t.shape = (nz,1,mz)
 
-    #harcode sigma z
-    #sigma_z_t = 0.0001*np.identity(nz)
-    # sigma_z_t = np.diag([0.0001,1])
     #initialize output matrices
     sigma_bar_xzt = np.zeros((n,nz))
     S_t = np.zeros((nz,nz))
@@ -774,7 +776,7 @@ def main():
     N = 8  # number of states
     state_est_t_prev = np.array([[u_roll[0],u_yaw[0],wrap_to_pi(u_roll[1]-u_roll[0])/DT,wrap_to_pi(u_yaw[1]-u_yaw[0])/DT,u_v_ang[0],u_v_mag[0],data_TWD[0],data_TWS[0]]]).T #initial state assum global (0,0) is at northwest corner
     # var_est_t_prev = 0.01*np.identity(N)
-    var_est_t_prev = INIT_COV_MATRIX
+    var_est_t_prev = var_initial_diag
 
     state_estimates = np.zeros((N,1, len(time_stamps)))
     covariance_estimates = np.zeros((N, N, len(time_stamps)))
